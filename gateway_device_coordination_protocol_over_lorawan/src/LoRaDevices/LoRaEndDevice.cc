@@ -1480,7 +1480,7 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
         }
         // Disabled for evaluating the number of messages of the Gateway-Device coordination protocol.
         // Enable for evaluating the correcteness of the entire protocol
-        /*else {
+        else {
             // Pairing algorithm is ended
             EV << "Sending data...\n";
 
@@ -1509,8 +1509,8 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
                 associationSKey,
                 spreadingFactor, transmissionPower, bandwidth, channelFrequency);
             sendMessage(false);
-        }*/
-        else{
+        }//*/
+        /*else{
             // Terminate and notify gateways to stop the simulation when all end devices have finished the protocol run
             cModule* parent = getParentModule();
             const int nGateways = parent->par("nGateways").intValue();
@@ -1526,7 +1526,7 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
             eventTimeoutDutyCycle = nullptr;
 
             return;
-        }
+        }*/
 
         // Send signal for statistic collection
         emit(signalSent, 1u);

@@ -1678,6 +1678,7 @@ void LoRaGateway::processMessageFromLoRaLayer(
         return;
     }
 
+
     // Check if the message is received via LoRa
     if (srcAddress == std::array<uint8_t, IPv4_ADDRESS_SIZE> {0,0,0,0}) {
         // Send signal for statistic collection
@@ -4417,11 +4418,16 @@ bool LoRaGateway::checkLoRaInterference(cMessage* msg) {
         // the time on air. However, the external noise must always be applied
 
         // Get message RSSI
-        LoRaEndDevice* device = dynamic_cast<LoRaEndDevice*>(msg->getSenderModule());
-        if (!device)
-            return false;
+        int rssi = 0;
 
-        int rssi = calculateRSSI(this, device->getPosX(), device->getPosY(), posX, posY, EV);
+        LoRaEndDevice* device = dynamic_cast<LoRaEndDevice*>(msg->getSenderModule());
+        if (device)
+            rssi = calculateRSSI(this, device->getPosX(), device->getPosY(), posX, posY, EV);
+        else {
+            LoRaGateway* gateway = dynamic_cast<LoRaGateway*>(msg->getSenderModule());
+            rssi = calculateRSSI(this, gateway->getPosX(), gateway->getPosY(), posX, posY, EV);
+        }
+
         EV << "Message RSSI: " << rssi << "\n";
 
         // Apply external noise and insert the message in interferences
