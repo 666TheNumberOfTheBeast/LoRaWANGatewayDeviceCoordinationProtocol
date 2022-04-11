@@ -562,8 +562,9 @@ void calculateMICDownlink(LoRaDatalinkFrame* datalinkMsg, LoRaAppDownlinkFrame* 
     setArrayInMessageDatalink(datalinkMsg, &LoRaDatalinkFrame::setMIC, cmac, LORA_FRAME_SIZE_DATALINK_MIC);
 }
 
-void calculateMIC(LoRaDatalinkFrame* datalinkMsg, omnetpp::cMessage* appMsg, uint8_t* keyMIC) {
-    if (!datalinkMsg || !appMsg || !keyMIC)
+//void calculateMIC(LoRaDatalinkFrame* datalinkMsg, omnetpp::cMessage* appMsg, uint8_t* keyMIC) {
+void calculateMIC(LoRaDatalinkFrame* datalinkMsg, uint8_t* keyMIC) {
+    if (!datalinkMsg || !keyMIC)
         return;
 
     LoRaAppUplinkFrame* appMsg_ = dynamic_cast<LoRaAppUplinkFrame*>(datalinkMsg->getEncapsulatedPacket());
@@ -1230,7 +1231,8 @@ omnetpp::cPacket* createMessageUplink(
 
     //============
     datalinkMsg->encapsulate(appMsg);
-    calculateMIC(datalinkMsg, appMsg, keyMIC);
+    //calculateMIC(datalinkMsg, appMsg, keyMIC);
+    calculateMIC(datalinkMsg, keyMIC);
     //============
 
     return createMessagePhysical(
@@ -1345,7 +1347,8 @@ omnetpp::cPacket* createMessageDownlink(
 
     //============
     datalinkMsg->encapsulate(appMsg);
-    calculateMIC(datalinkMsg, appMsg, keyMIC);
+    //calculateMIC(datalinkMsg, appMsg, keyMIC);
+    calculateMIC(datalinkMsg, keyMIC);
     //============
 
     return createMessagePhysical(
@@ -1533,13 +1536,6 @@ void sendSecurely(
     //EV << "gatename: " << gatename << "\n";
     //EV << "index: " << index << "\n";
 
-    //===============
-    /*cChannel* txChannel = gate(gatename, index)->getTransmissionChannel();
-    if (!txChannel)
-        return;
-
-    simtime_t txFinishTime = txChannel->getTransmissionFinishTime();*/
-    //===============
 
     omnetpp::simtime_t txFinishTime = 0;
 
@@ -1568,14 +1564,19 @@ void sendSecurely(
         }
     }
 
+    std::cout << "txFinishTime: " << txFinishTime << "\n";
+
+
+    //============================
+    // Do not use sendDelayed and sendDelayedBroadcast because block the entire channel
+
     // Check if the channel is free after delay
-    if (txFinishTime <= omnetpp::simTime() + delay) {
-        //==================================
-        // Check if the message is a LoRa frame
+    /*if (txFinishTime <= omnetpp::simTime() + delay) {
+        // Check if the message is a LoRa frame to set the data rate
         LoRaPhysicalFrame* phyMsg = dynamic_cast<LoRaPhysicalFrame*>(pkt);
         if (phyMsg)
             setChannelLoRaDatarate(instance, pkt, gatename);
-        //==================================
+
         if (delay > 0)
             // Channel will be free after delay => send out delayed packet
             index >= 0 ? instance->sendDelayed(pkt, delay, gatename, index) :
@@ -1592,7 +1593,40 @@ void sendSecurely(
                 std::tuple<omnetpp::cPacket*, std::string, int> {pkt, gatename, index};
 
         instance->scheduleAt(txFinishTime, eventTimeout);
+    }*/
+    //============================
+
+
+    //============================
+    // Do not use sendDelayed and sendDelayedBroadcast because block the entire channel, use timers.
+
+    // Check if the channel is free and no delayed message has to be sent
+    if (delay == 0 && txFinishTime <= omnetpp::simTime()) {
+        // Check if the message is a LoRa frame to set the data rate
+        LoRaPhysicalFrame* phyMsg = dynamic_cast<LoRaPhysicalFrame*>(pkt);
+        if (phyMsg)
+            setChannelLoRaDatarate(instance, pkt, gatename);
+
+        // Channel is free => send out the packet immediately
+        index >= 0 ? instance->send(pkt, gatename, index) : sendBroadcast(instance, pkt, gatename);
     }
+    else {
+        // Store packet in the map and schedule timer
+        //EV << "Schedule timeout\n";
+        omnetpp::cMessage* eventTimeout = new omnetpp::cMessage("timeoutChannelTX");
+        eventTimeoutChannelTransmissions[eventTimeout] =
+                std::tuple<omnetpp::cPacket*, std::string, int> {pkt, gatename, index};
+
+        omnetpp::simtime_t scheduledTime = omnetpp::simTime() + delay;
+
+        // Check if the channel is free after delay
+        if (txFinishTime <= scheduledTime)
+            // Channel will be free after delay => schedule timer to send out the packet
+            instance->scheduleAt(scheduledTime, eventTimeout);
+        else
+            instance->scheduleAt(txFinishTime, eventTimeout);
+    }
+    //============================
 }
 
 void sendSecurely(
@@ -1895,6 +1929,8 @@ long unsigned bytesToLuint(uint8_t* bytes) {
 
 
 
+// ********************* SECURITY *********************
+
 // Generate a nonce in [0, max[
 unsigned generateNonce(unsigned max) {
     return rand() % max;
@@ -1915,6 +1951,22 @@ const char* generateKey(uint8_t rootKey[], unsigned nonce1, unsigned nonce2, uin
     return "";
 }
 
+void printKey(uint8_t* src, size_t size, const char* name, std::ostream& stream) {
+    if (!src || !name || size <= 0)
+        return;
+
+    stream << name << ": 0x";
+    for (size_t i=0; i<size; i++)
+        //stream << std::hex << (unsigned) src[i];
+        stream << " " << std::setfill('0') << std::setw(2) << std::hex << (unsigned) src[i];
+    stream << std::dec << "\n";
+}
+
+// ********************* SECURITY END *********************
+
+
+
+// ********************* LoRa *********************
 
 bool isInLoRaRange(unsigned ax, unsigned ay, unsigned bx, unsigned by, double* distance, float range) {
     // Calculate euclidean distance
@@ -1956,16 +2008,371 @@ int calculateRSSI(omnetpp::cSimpleModule* instance, unsigned ax, unsigned ay, un
     return instance->normal(-10 * PATH_LOSS_EXP * log10(d) + MEASURED_POWER, 2);
 }
 
-void printKey(uint8_t* src, size_t size, const char* name, std::ostream& stream) {
-    if (!src || !name || size <= 0)
-        return;
+void getPhysicalParameters(
+        int region, double* dutyCycle,
+        std::map<float, std::vector<std::tuple<float, uint8_t>>>& bandwidths,
+        std::map<float, std::vector<float>>& channelFrequencies,
+        bool getBandwidths/*=true*/) {
+    std::vector<float> bandwidths_;
+    std::vector<std::tuple<uint8_t, float, float, uint8_t, uint8_t>> frequencies;
+    uint8_t transmissionPowerMax = 0;
+    std::map<uint8_t, std::vector<uint8_t>> transmissionPowers;
 
-    stream << name << ": 0x";
-    for (size_t i=0; i<size; i++)
-        //stream << std::hex << (unsigned) src[i];
-        stream << " " << std::setfill('0') << std::setw(2) << std::hex << (unsigned) src[i];
-    stream << std::dec << "\n";
+    switch(region) {
+        case REGION_EU868:
+            // Append the bandwidths
+            bandwidths_.push_back(BANDWIDTH_125);
+            bandwidths_.push_back(BANDWIDTH_250);
+
+            // Append the channel frequencies, starting frequency, step frequency,
+            // max spreading factor and number of spreading factors for each bandwidth
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t>(
+                            CHANNEL_FREQUENCIES_BW_125_EU_868,
+                            CHANNEL_FREQUENCY_START_BW_125_EU_868,
+                            CHANNEL_FREQUENCY_STEP_BW_125_EU_868,
+                            SPREADING_FACTOR_MAX_BW_125_EU_868,
+                            SPREADING_FACTOR_NUM_BW_125_EU_868));
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t>(
+                            CHANNEL_FREQUENCIES_BW_250_EU_868,
+                            CHANNEL_FREQUENCY_START_BW_250_EU_868,
+                            CHANNEL_FREQUENCY_STEP_BW_250_EU_868,
+                            SPREADING_FACTOR_MAX_BW_250_EU_868,
+                            SPREADING_FACTOR_NUM_BW_250_EU_868));
+
+            transmissionPowerMax = MAX_TX_POWER_EU_868;
+            if (dutyCycle)
+                *dutyCycle = DUTY_CYCLE_EU_868;
+            break;
+        case REGION_EU433:
+            // Append the bandwidths
+            bandwidths_.push_back(BANDWIDTH_125);
+            bandwidths_.push_back(BANDWIDTH_250);
+
+            // Append the channel frequencies, starting frequency, step frequency,
+            // max spreading factor and number of spreading factors for each bandwidth
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t>(
+                            CHANNEL_FREQUENCIES_BW_125_EU_433,
+                            CHANNEL_FREQUENCY_START_BW_125_EU_433,
+                            CHANNEL_FREQUENCY_STEP_BW_125_EU_433,
+                            SPREADING_FACTOR_MAX_BW_125_EU_433,
+                            SPREADING_FACTOR_NUM_BW_125_EU_433));
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t>(
+                            CHANNEL_FREQUENCIES_BW_250_EU_433,
+                            CHANNEL_FREQUENCY_START_BW_250_EU_433,
+                            CHANNEL_FREQUENCY_STEP_BW_250_EU_433,
+                            SPREADING_FACTOR_MAX_BW_250_EU_433,
+                            SPREADING_FACTOR_NUM_BW_250_EU_433));
+
+            transmissionPowerMax = MAX_TX_POWER_EU_433;
+            if (dutyCycle)
+                *dutyCycle = DUTY_CYCLE_EU_433;
+            break;
+        case REGION_US915:
+            // Append the bandwidths
+            bandwidths_.push_back(BANDWIDTH_125);
+            bandwidths_.push_back(BANDWIDTH_500);
+
+            // Append the channel frequencies, starting frequency, step frequency,
+            // max spreading factor and number of spreading factors for each bandwidth
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t> {
+                            CHANNEL_FREQUENCIES_BW_125_US_915,
+                            CHANNEL_FREQUENCY_START_BW_125_US_915,
+                            CHANNEL_FREQUENCY_STEP_BW_125_US_915,
+                            SPREADING_FACTOR_MAX_BW_125_US_915,
+                            SPREADING_FACTOR_NUM_BW_125_US_915});
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t> {
+                            CHANNEL_FREQUENCIES_BW_500_UP_US_915,
+                            CHANNEL_FREQUENCY_START_BW_500_UP_US_915,
+                            CHANNEL_FREQUENCY_STEP_BW_500_UP_US_915,
+                            SPREADING_FACTOR_MAX_BW_500_UP_US_915,
+                            SPREADING_FACTOR_NUM_BW_500_UP_US_915});
+
+            transmissionPowerMax = MAX_TX_POWER_US_915;
+            if (dutyCycle)
+                *dutyCycle = DUTY_CYCLE_US_915;
+            break;
+        default:
+            throw std::invalid_argument("Invalid region parameter");
+    }
+
+    // Calculate the channel frequencies and transmission powers associated to spreading factors
+    uint8_t tp = 0;
+    for (unsigned i=0; i<bandwidths_.size(); i++) {
+        float bw   = bandwidths_[i];
+        auto tuple = frequencies[i];
+        int frequencyChannels      = std::get<0>(tuple);
+        float frequencyStart       = std::get<1>(tuple);
+        float frequencyStep        = std::get<2>(tuple);
+        uint8_t spreadingFactorMax = std::get<3>(tuple);
+        uint8_t spreadingFactorNum = std::get<4>(tuple);
+
+        for (int j=0; j<frequencyChannels; j++) {
+            if (j == 0)
+                channelFrequencies[bw] = std::vector<float>{frequencyStart + j*frequencyStep};
+            else
+                channelFrequencies[bw].push_back(frequencyStart + j*frequencyStep);
+
+            if (getBandwidths && spreadingFactorNum > 0) {
+                int sf = spreadingFactorMax - j;
+                auto tuple = std::tuple<float, uint8_t> {bw, transmissionPowerMax - 2*tp};
+
+                if (bandwidths.find(sf) == bandwidths.end())
+                    bandwidths[sf] = std::vector<std::tuple<float, uint8_t>> {tuple};
+                else
+                    bandwidths[sf].push_back(tuple);
+
+                spreadingFactorNum--;
+                tp++;
+            }
+        }
+    }
 }
+
+void getPhysicalParameters(int region, std::map<float, std::vector<float>>& channelFrequencies) {
+    std::map<float, std::vector<std::tuple<float, uint8_t>>> bandwidths;
+    getPhysicalParameters(region, nullptr, bandwidths, channelFrequencies, false);
+}
+
+// ********************* LoRa END *********************
+
+
+
+// ********************* BACKGROUND NOISE *********************
+
+// Calculate BER probability according to the experimental BER curves
+float calculateProbabilityBER(int maxBer, int snrThreshold, int snr) {
+    //EV << "maxBer: " << maxBer << "\n";
+    //EV << "snrThreshold: " << snrThreshold << "\n";
+    //EV << "snr: " << snr << "\n";
+
+    // Check if the max BER is valid
+    if (maxBer < 0 || maxBer > 100)
+        return -1;
+
+    float probDrop = 0;
+
+    // Check if the SNR is greater than the max value
+    if(snr <= -55)
+        probDrop = maxBer;
+    // Else check if the SNR is below the threshold
+    else if (snr < snrThreshold) {
+        // Equation approximating the BER curve: y = c - e^(s x) for x <= 55 - abs(snrThreshold) <=>
+        // -y+c = e^(s x) <=>
+        // ln(-y+c) = s x <=>
+        // ln(-y+c)/x = s <=>
+        // ln(c)/x = s
+
+        // Derive the slope of the curve constrained in x <= 55 - abs(snrThreshold)
+        float slope = log(maxBer + 1) / (55 - abs(snrThreshold));
+
+        // Calculate drop probability
+        probDrop = maxBer + 1 - exp(slope * (55 - abs(snr)));
+    }
+
+    // Divide the probability by 100 to bound it in [0,1]
+    return probDrop / 100;
+}
+
+// Return Signal to Interference plus Noise Ratio and message drop probability
+std::tuple<double, float> applyExternalNoise(
+        omnetpp::cMessage* msg, int rssi, uint8_t sf, float bw,
+        std::map<long, std::tuple<double, float>>& interferences, std::ostream& stream) {
+    if (!msg)
+        return std::tuple<int, float> {1, -1};
+
+    stream << "Applying external noise...\n";
+
+    // Thermal noise
+    double thermalNoisePower = THERMAL_NOISE_POWER_SPECTRAL_DENSITY + NOISE_FIGURE_RX + 10 * log10(bw*1000);
+    stream << "Thermal noise: " << thermalNoisePower << "\n";
+
+    // Additive White Gaussian Noise (AWGN)
+    //thermalNoisePower = normal(0, thermalNoisePower);
+    //EV << "Thermal noise (AWGN): " << thermalNoisePower << "\n";
+
+    // AWGN disabled because has zero mean and is not suitable to compare with RSSI that is negative (too influence)
+
+
+    // External interference due to other technologies operating on the same unlicensed frequencies
+    // (e.g. Wi-Fi, Bluetooth)
+    float externalInterferenceProbability = 1 - pow(
+            (1 - PROBABILITY_OCCURRENCE_EXTERNAL_INTERFERENCE),
+            ceil(bw/EXTERNAL_INTERFERENCE_BANDWIDTH));
+
+    stream << "externalInterferenceProbability: " << externalInterferenceProbability << "\n";
+
+    double externalInterferencePower = 0;
+
+    // Check if the external probability occurs
+    //if (((rand() + (int) uniform(0,100)) % 101) / 100.0 < externalInterferenceProbability) {
+    if ((rand() % 101) / 100.0 < externalInterferenceProbability) {
+        // Interval of interference power in dBm considered for external interference is [-105, -65] almost [-105, -80]
+        std::random_device rd {};
+        std::mt19937 generator { rd() };
+
+        // With the following parameters the curve is not exactly equal to the experimental one because
+        // the interval is [-108, -98].
+        // It requires GEV type II instead of GEV type I but it is not defined in C++, so, use this approximation
+        float location = -105;
+        float scale    = 1.65;
+        std::extreme_value_distribution<float> distribution(location, scale);
+
+        //for (int i=0; i<20; i++)
+        //    stream << "distribution(generator): " << distribution(generator) << "\n";
+
+        externalInterferencePower = distribution(generator) + 10 * log10(PROBABILITY_OCCURRENCE_EXTERNAL_INTERFERENCE);
+        stream << "External Interference Power: " << externalInterferencePower << "\n";
+
+        //stream << "10 * log10(PROBABILITY_OCCURRENCE_EXTERNAL_INTERFERENCE): " << 10 * log10(PROBABILITY_OCCURRENCE_EXTERNAL_INTERFERENCE) << "\n";
+    }
+
+    // Calculate Signal to Interference plus Noise Ratio for the signal.
+    // To sum Noise and Interference, convert them from dBm to mW
+    double noiseAndInterferencePower = (pow(10, thermalNoisePower/10) + pow(10, externalInterferencePower/10));
+    stream << "NoiseAndInterference power: " << noiseAndInterferencePower << " mW\n";
+    // Then convert the sum from mW to dBm
+    //int sinr = rssi - 10 * log10(pow(10, thermalNoisePower/10) + pow(10, externalInterferencePower/10));
+    int sinr = rssi - 10 * log10(noiseAndInterferencePower);
+    int sinrThreshold = 0;
+    int maxBer        = 0;
+    stream << "SINR: " << sinr << "\n";
+
+    //stream << "thermalNoisePower (mW): " << pow(10, thermalNoisePower/10) << "\n";
+    //stream << "externalInterferencePower (mW): " << pow(10, externalInterferencePower/10) << "\n";
+
+    // Get the SINR threshold
+    if (bw == BANDWIDTH_125)
+        switch (sf) {
+            case 7:
+                sinrThreshold = -35; // (-30-23-35-33-44-43)/6
+                maxBer = 47; // (50+50+36+50)/4
+                break;
+            case 8:
+                sinrThreshold = -35;
+                maxBer = 48;
+                break;
+            case 9:
+                sinrThreshold = -35; // (-40-32-42-43-54)/6
+                maxBer = 49; // (50+58+37+49)/4
+                break;
+            case 10:
+                sinrThreshold = -40;
+                maxBer = 29;
+                break;
+            case 11:
+                sinrThreshold = -45;
+                maxBer = 25;
+                break;
+            case 12:
+                sinrThreshold = -48; // (-48-40-50-52)/4
+                maxBer = 22; // (30+49+2+5)/4
+                break;
+            default:
+                throw std::invalid_argument("Invalid spreading factor");
+        }
+    else if (bw == BANDWIDTH_250)
+        switch (sf) {
+            case 7:
+                sinrThreshold = -28; // (-24-20-26-23-39-36)/6
+                maxBer = 49; // (49+49+50+48)/4
+                break;
+            case 8:
+                sinrThreshold = -28;
+                maxBer = 50;
+                break;
+            case 9:
+                sinrThreshold = -28; // (-34-29-35--37-52-53)/6
+                maxBer = 51; // (49+50+52+53)/4
+                break;
+            case 10:
+                sinrThreshold = -33;
+                maxBer = 47;
+                break;
+            case 11:
+                sinrThreshold = -36;
+                maxBer = 44;
+                break;
+            case 12:
+                sinrThreshold = -43; // (-40-38-46-47)/4
+                maxBer = 40; // (48+50+30+30)/4
+                break;
+            default:
+                throw std::invalid_argument("Invalid spreading factor");
+        }
+    else
+        switch (sf) {
+            case 7:
+                sinrThreshold = -26; // (-20-17-22-22-34-38)/6
+                maxBer = 50; // (49+50+50+50)/4
+                break;
+            case 8:
+                sinrThreshold = -29;
+                maxBer = 49;
+                break;
+            case 9:
+                sinrThreshold = -35; // (-30-26-31-30-48-44)/6
+                maxBer = 47; // (49+50+40+50)/4
+                break;
+            case 10:
+                sinrThreshold = -36;
+                maxBer = 49;
+                break;
+            case 11:
+                sinrThreshold = -37;
+                maxBer = 51;
+                break;
+            case 12:
+                sinrThreshold = -38; // (-37-36-40-40)/4
+                maxBer = 53; // (49+55+48+58)/4
+                break;
+            default:
+                throw std::invalid_argument("Invalid spreading factor");
+        }
+
+    float probDrop = 0;
+
+    // Check if the snr is below the threshold
+    if (sinr < sinrThreshold) {
+        stream << "The message is affected by external interference!\n";
+
+        // Calculate the probability the message is dropped
+        probDrop = calculateProbabilityBER(maxBer, sinrThreshold, sinr);
+        stream << "The message is dropped with a probability of " << probDrop <<"\n";
+    }
+
+    //auto tuple = std::tuple<int, float> {sinr, probDrop};
+    auto tuple = std::tuple<double, float> {noiseAndInterferencePower, probDrop};
+
+    // Initialize a corresponding entry in the interferences map
+    //interferences[msg] = tuple;
+    long msgId = msg->getTreeId();
+    interferences[msgId] = tuple;
+
+    return tuple;
+}
+
+// Return Signal to Interference plus Noise Ratio and message drop probability
+std::tuple<double, float> applyExternalNoise(
+        omnetpp::cMessage* msg, int rssi,
+        std::map<long, std::tuple<double, float>>& interferences, std::ostream& stream) {
+    if (!msg)
+        return std::tuple<int, float> {-1, -1};
+
+    // Get message parameters (sent by source module)
+    LoRaPhysicalFrame* msg_ = dynamic_cast<LoRaPhysicalFrame*>(msg);
+    if (!msg_)
+        return std::tuple<int, float> {-1, -1};
+
+    return applyExternalNoise(msg, rssi, msg_->getSpreadingFactor(), msg_->getBandwidth(), interferences, stream);
+}
+
+// ********************* BACKGROUND NOISE END *********************
 
 
 

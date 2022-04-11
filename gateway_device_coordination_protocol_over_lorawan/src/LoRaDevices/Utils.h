@@ -8,6 +8,8 @@
 #include <openssl/evp.h>
 #include <openssl/cmac.h>
 
+#include <random>
+
 //#include "inet/physicallayer/wireless/common/base/packetlevel/ScalarAnalogModelBase.h"
 
 #include "../IPPackets/IPv4Packet_m.h"
@@ -148,6 +150,9 @@ const double SPEED_LIGHT_ON_AIR = 2.99e8; // m/s
 // Retransmissions of an end device GENERATE_COMMON_KEY, HELLO and FORWARD message to minimize loss probability
 //const uint8_t RETRANSMISSIONS = 1;
 const uint8_t RETRANSMISSIONS = 3;
+
+// Transmission delays of gateways for HELLO_GATEWAY
+const uint8_t HELLO_GATEWAY_MAX_DELAY = 30; // Seconds
 
 // Transmission and receving windows of end devices
 const uint8_t WINDOW_TX   = 0;
@@ -349,7 +354,8 @@ uint8_t isValidMessageUdp(omnetpp::cMessage* msg, unsigned* port);*/
 // ********************* MIC *********************
 
 // Calculate MIC of LoRa frame
-void calculateMIC(LoRaDatalinkFrame* datalinkMsg, omnetpp::cMessage* appMsg, uint8_t* keyMIC);
+//void calculateMIC(LoRaDatalinkFrame* datalinkMsg, omnetpp::cMessage* appMsg, uint8_t* keyMIC);
+void calculateMIC(LoRaDatalinkFrame* datalinkMsg, uint8_t* keyMIC);
 
 // Check MIC of LoRa frame
 bool isValidMIC(LoRaDatalinkFrame* datalinkMsg, omnetpp::cMessage* appMsg, uint8_t* keys[], int keysSize);
@@ -500,6 +506,8 @@ long unsigned bytesToLuint(uint8_t* bytes);
 
 
 
+// ********************* SECURITY *********************
+
 // Generate a nonce in [0, max[
 unsigned generateNonce(unsigned max);
 
@@ -507,12 +515,47 @@ unsigned generateNonce(unsigned max);
 //const char* generateKey(char rootKey[], unsigned nonce1, unsigned nonce2, uint8_t networkId[]);
 const char* generateKey(uint8_t rootKey[], unsigned nonce1, unsigned nonce2, uint8_t networkId[]);
 
+void printKey(uint8_t* src, size_t size, const char* name, std::ostream& stream);
+
+// ********************* SECURITY END *********************
+
+
+
+// ********************* LoRa *********************
+
 // Return true if A is in LoRa range of B
 bool isInLoRaRange(unsigned ax, unsigned ay, unsigned bx, unsigned by, double* distance, float range);
 
 // Simulate RSSI associated with an input message
-int calculateRSSI(omnetpp::cSimpleModule* instance, unsigned ax, unsigned ay, unsigned bx, unsigned by, std::ostream& stream);
+int calculateRSSI(
+        omnetpp::cSimpleModule* instance, unsigned ax, unsigned ay, unsigned bx, unsigned by, std::ostream& stream);
+
+void getPhysicalParameters(
+        int region, double* dutyCycle,
+        std::map<float, std::vector<std::tuple<float, uint8_t>>>& bandwidths,
+        std::map<float, std::vector<float>>& channelFrequencies,
+        bool getBandwidths=true);
+
+void getPhysicalParameters(int region, std::map<float, std::vector<float>>& channelFrequencies);
+// ********************* LoRa END *********************
+
+
+
+// ********************* BACKGROUND NOISE *********************
+
+// Calculate BER probability according to the experimental BER curves
+float calculateProbabilityBER(int maxBer, int snrThreshold, int snr);
+
+// Return Signal to Interference plus Noise Ratio and message drop probability
+std::tuple<double, float> applyExternalNoise(
+        omnetpp::cMessage* msg, int rssi, uint8_t sf, float bw,
+        std::map<long, std::tuple<double, float>>& interferences, std::ostream& stream);
+
+// Return Signal to Interference plus Noise Ratio and message drop probability
+std::tuple<double, float> applyExternalNoise(
+        omnetpp::cMessage* msg, int rssi,
+        std::map<long, std::tuple<double, float>>& interferences, std::ostream& stream);
+// ********************* BACKGROUND NOISE END *********************
+
 
 //int binomialCoefficient(int n, int k);
-
-void printKey(uint8_t* src, size_t size, const char* name, std::ostream& stream);

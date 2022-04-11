@@ -1,8 +1,6 @@
 #include "LoRaGateway.h"
 #include "LoRaEndDevice.h"
 
-#include <random>
-
 //namespace masterthesis {
 
 
@@ -31,6 +29,7 @@ LoRaGateway::LoRaGateway() {
 LoRaGateway::~LoRaGateway() {
     // Dispose of dynamically allocated the objects
     cancelAndDelete(eventTimeoutResources);
+    cancelAndDelete(eventTimeoutNearbyGateways);
 
     /*for (auto it : map) {
         auto msg1 = std::get<0>(it.second);
@@ -72,6 +71,7 @@ LoRaGateway::~LoRaGateway() {
     routingTable.clear();
     eventTimeoutRetransmissions.clear();
     eventTimeoutChannelTransmissions.clear();
+    channelFrequencies.clear();
     interferences.clear();
 }
 
@@ -149,9 +149,9 @@ void LoRaGateway::initialize() {
     // The message is received when the end device approximately closes the transmission window (time on air).
     // After airtime the end device awaits RX_DELAY_1, so, the response must be delayed only if
     // response airtime < RX_DELAY_1, otherwise must be immediately transmitted.
-    // For a retransmission attempt, await this roughly identical moment in the future (TX_DELAY) and apply the delay
-    // (no airtime here, be confident on half RX_DELAY_1 but it is only an attempt)
-    timeoutLoRa = RX_DELAY_1/2 + TX_DELAY;
+    // For a retransmission attempt, await this roughly identical moment in the future (TX_DELAY + RX_DELAY_1) and
+    // apply the delay (no airtime here, be confident on RX_DELAY_1 + 0.5 but it is only an attempt)
+    timeoutLoRa = TX_DELAY + RX_DELAY_1 + 0.5;
     timeoutTcp  = 3;
 
     eventTimeoutResources = new cMessage("timeoutResources");
@@ -202,7 +202,7 @@ void LoRaGateway::initialize() {
     else {
         if (realDeployment) {
             // 1. calculate min total distance of an end device from the two gateways
-            // 2. place the gateway between minDistance e max = calculated min distance
+            // 2. place the gateway between minDistance and max = calculated min distance
 
             // Get all RSSIs
             cValueArray* RSSIs_ = (cValueArray*) getParentModule()->par("RSSIs").objectValue();
@@ -291,103 +291,51 @@ void LoRaGateway::initialize() {
                 double angle = ((rand() + (int) uniform(0, 360)) % 360) * 3.14 / 180;
                 posX = otherGateway->getPosX() + d * cos(angle);
                 posY = otherGateway->getPosY() + d * sin(angle);
-            } while (posX < 0 || posY < 0);
+            } while (posX < 0 || posY < 0 || posX > bgX || posY > bgY);
         }
         else {
-            // ============================
-            // Set gateway position
-            /*posX = (rand() + (int) uniform(0, bgX)) % bgX;
-            posY = (rand() + (int) uniform(0, bgY)) % bgY;
-            //posX = (rand() % bgX + (int) uniform(500, bgX)) % bgX;
-            //posY = (rand() % bgY + (int) uniform(500, bgY)) % bgY;
+            bool fullCoverage = parent->par("fullCoverage").boolValue();
 
-            // Check if it is a valid position
-            if (posY <= 300 && posX < bgX*0.7)
-                posY += 1000;
+            // Gateway index
+            int i = 0;
 
-            unsigned lastPosX;
-            unsigned lastPosY;
+            // Set min and max distance from a gateway
+            // sqrt(dx^2 + dy^2) < LORA_RANGE => sqrt(2dx^2) < LORA_RANGE => sqrt(2)dx < LORA_RANGE
+            // dx < LORA_RANGE / sqrt(2)
+            unsigned minDx = 500;
+            unsigned maxDx = LORA_RANGE / sqrt(2);
 
-            // Check if the gateway is in the range of at least another gateway (among the previous in the vector)
-            if (!isInGatewayRange(index, &lastPosX, &lastPosY)) {
-                // Try to place the gateway in the radio range of the previous one
-                posX = rand()%2 ? (lastPosX + (int) uniform(500, 4500)) % bgX : (lastPosX - (int) uniform(500, 4500)) % bgX;
-                posY = rand()%2 ? (lastPosY + (int) uniform(500, 4500)) % bgY : (lastPosY - (int) uniform(500, 4500)) % bgY;
-            }*/
-            // ============================
+            // Check if all end devices should be located in the radio range of all gateways
+            if (fullCoverage) {
+                // Get the first gateway
+                minDx = 100;
+                maxDx = 300;
+            }
+            else {
+                // Get a random gateway among the previous in the vector
+                int i = (rand() + (int) uniform(0, 100)) % index;
+            }
 
-            // ============================
-            // Get a random gateway among the previous in the vector
-            int i = (rand() + (int) uniform(0, 100)) % index;
+            // Get the gateway
             LoRaGateway* otherGateway = dynamic_cast<LoRaGateway*>(parent->getSubmodule("gateways", i));
 
-            const unsigned minDx = 500;
-            const unsigned maxDx = LORA_RANGE / sqrt(2);
-            const unsigned diffDx = maxDx- minDx;
+            // Get a random distance in [min, max]
+            const unsigned diffDx = maxDx - minDx;
+            double d = minDx + (rand() + (int) uniform(0, diffDx)) % diffDx;
 
             // Try to set gateway position in the other gateway range
-            //posX = rand()%2 ? (otherGateway->getPosX() + (int) uniform(minDx, maxDx)) % bgX : (otherGateway->getPosX() - (int) uniform(minDx, maxDx)) % bgX;
-            //posY = rand()%2 ? (otherGateway->getPosY() + (int) uniform(minDx, maxDx)) % bgY : (otherGateway->getPosY() - (int) uniform(minDx, maxDx)) % bgY;
-            posX = rand()%2 ? (otherGateway->getPosX() + minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgX :
+            /*posX = rand()%2 ? (otherGateway->getPosX() + minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgX :
                               (otherGateway->getPosX() - minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgX;
             posY = rand()%2 ? (otherGateway->getPosY() + minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgY :
-                              (otherGateway->getPosY() - minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgY;
-            // ============================
+                              (otherGateway->getPosY() - minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgY;*/
 
-            // Create connections over LoRa with other gateways based on location
-            /*int gateIndex = 0;
-
-            for (int i=0; i<index; i++) {
-                // Get the other gateway in the vector
-                otherGateway = dynamic_cast<LoRaGateway*>(parent->getSubmodule("gateways", i));
-                double distance = 0;
-
-                // Work by addition
-                // Check if the gateway is in the range of at least another gateway (among the previous in the vector)
-                if (isInLoRaRange(posX, posY, otherGateway->getPosX(), otherGateway->getPosY(), &distance, LORA_RANGE)) {
-                    // Get gateway vector gate size (IN & OUT sizes are equal)
-                    int otherGatewayGateSize = otherGateway->gateSize(otherGateway->getLoRaGateIn());
-
-                    // Increment gate vector sizes
-                    setGateSize(LORA_GATE_BASENAME, gateIndex+1);
-                    otherGateway->setGateSize(otherGateway->getLoRaGateBasename(), otherGatewayGateSize+1);
-
-                    // Get device output gate & gateway input gate
-                    cGate* gatewayGate  = gate(LORA_GATE_OUT, gateIndex);
-                    cGate* otherGatewayGate = otherGateway->gate(otherGateway->getLoRaGateIn(), otherGatewayGateSize);
-
-                    EV << "Device gate OUT vector size: " << gatewayGate->getVectorSize() << "\n";
-                    EV << "Gateway gate IN vector size: " << otherGatewayGate->getVectorSize() << "\n";
-                    //EV << "Gateway gate IN vector size: " << gateway->gateSize(gateway->getLoRaGateIn()) << "\n";
-
-                    // Define channel
-                    double delay = distance / SPEED_LIGHT_ON_AIR;
-                    cDatarateChannel* channel = cDatarateChannel::create("channel");
-                    channel->setDelay(delay);
-                    channel->setDatarate(5e3); // 5 Kb/s
-
-                    // Create OUT->IN connection
-                    gatewayGate->connectTo(otherGatewayGate, channel);
-                    channel->callInitialize();
-
-                    // Get device input gate & gateway output gate
-                    gatewayGate  = gate(LORA_GATE_IN, gateIndex++);
-                    otherGatewayGate = otherGateway->gate(otherGateway->getLoRaGateOut(), otherGatewayGateSize);
-
-                    EV << "Device gate IN vector size: " << gatewayGate->getVectorSize() << "\n";
-                    EV << "Gateway gate OUT vector size: " << otherGatewayGate->getVectorSize() << "\n";
-                    //EV << "Gateway gate OUT vector size: " << gateway->gateSize(gateway->getLoRaGateOut()) << "\n";
-
-                    // Define channel
-                    channel = cDatarateChannel::create("channel");
-                    channel->setDelay(delay);
-                    channel->setDatarate(5e3); // 5 Kb/s
-
-                    // Create IN<-OUT connection
-                    otherGatewayGate->connectTo(gatewayGate, channel);
-                    channel->callInitialize();
-                }
-            }*/
+            // Locate in the gateway range with positive coordinates
+            do {
+                // Get a random angle in radians
+                double angle = ((rand() + (int) uniform(0, 360)) % 360) * 3.14 / 180;
+                posX = otherGateway->getPosX() + d * cos(angle);
+                posY = otherGateway->getPosY() + d * sin(angle);
+            } while (posX < 0 || posY < 0 || posX > bgX || posY > bgY);
         }
 
         // Create connections over LoRa with other gateways based on location
@@ -399,7 +347,6 @@ void LoRaGateway::initialize() {
             LoRaGateway* otherGateway = dynamic_cast<LoRaGateway*>(parent->getSubmodule("gateways", i));
             double distance = 0;
 
-            // Work by addition
             // Check if the gateway is in the range of at least another gateway (among the previous in the vector)
             if (isInLoRaRange(posX, posY, otherGateway->getPosX(), otherGateway->getPosY(), &distance, LORA_RANGE)) {
                 // Get gateway vector gate size (IN & OUT sizes are equal)
@@ -443,6 +390,10 @@ void LoRaGateway::initialize() {
                 // Create IN<-OUT connection
                 otherGatewayGate->connectTo(gatewayGate, channel);
                 channel->callInitialize();
+
+                // Share references with neighbor gateways for handling interferences
+                addNeighborGateway(otherGateway);
+                otherGateway->addNeighborGateway(this);
             }
         }
     }
@@ -473,6 +424,116 @@ void LoRaGateway::initialize() {
 
     // To automatically stop the simulation
     endDeviceTerminations = 0;
+
+
+    // Get current deployment region
+    int region = parent->par("region").intValue();
+
+    // Get LoRa regional parameters
+    /*std::vector<float> bandwidths_;
+    std::vector<std::tuple<uint8_t, float, float, uint8_t, uint8_t>> frequencies;
+
+    switch(region) {
+        case REGION_EU868:
+            // Append the bandwidths
+            bandwidths_.push_back(BANDWIDTH_125);
+            bandwidths_.push_back(BANDWIDTH_250);
+
+            // Append the channel frequencies, starting frequency, step frequency,
+            // max spreading factor and number of spreading factors for each bandwidth
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t>(
+                            CHANNEL_FREQUENCIES_BW_125_EU_868,
+                            CHANNEL_FREQUENCY_START_BW_125_EU_868,
+                            CHANNEL_FREQUENCY_STEP_BW_125_EU_868,
+                            SPREADING_FACTOR_MAX_BW_125_EU_868,
+                            SPREADING_FACTOR_NUM_BW_125_EU_868));
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t>(
+                            CHANNEL_FREQUENCIES_BW_250_EU_868,
+                            CHANNEL_FREQUENCY_START_BW_250_EU_868,
+                            CHANNEL_FREQUENCY_STEP_BW_250_EU_868,
+                            SPREADING_FACTOR_MAX_BW_250_EU_868,
+                            SPREADING_FACTOR_NUM_BW_250_EU_868));
+
+            break;
+        case REGION_EU433:
+            // Append the bandwidths
+            bandwidths_.push_back(BANDWIDTH_125);
+            bandwidths_.push_back(BANDWIDTH_250);
+
+            // Append the channel frequencies, starting frequency, step frequency,
+            // max spreading factor and number of spreading factors for each bandwidth
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t>(
+                            CHANNEL_FREQUENCIES_BW_125_EU_433,
+                            CHANNEL_FREQUENCY_START_BW_125_EU_433,
+                            CHANNEL_FREQUENCY_STEP_BW_125_EU_433,
+                            SPREADING_FACTOR_MAX_BW_125_EU_433,
+                            SPREADING_FACTOR_NUM_BW_125_EU_433));
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t>(
+                            CHANNEL_FREQUENCIES_BW_250_EU_433,
+                            CHANNEL_FREQUENCY_START_BW_250_EU_433,
+                            CHANNEL_FREQUENCY_STEP_BW_250_EU_433,
+                            SPREADING_FACTOR_MAX_BW_250_EU_433,
+                            SPREADING_FACTOR_NUM_BW_250_EU_433));
+
+            break;
+        case REGION_US915:
+            // Append the bandwidths
+            bandwidths_.push_back(BANDWIDTH_125);
+            bandwidths_.push_back(BANDWIDTH_500);
+
+            // Append the channel frequencies, starting frequency, step frequency,
+            // max spreading factor and number of spreading factors for each bandwidth
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t> {
+                            CHANNEL_FREQUENCIES_BW_125_US_915,
+                            CHANNEL_FREQUENCY_START_BW_125_US_915,
+                            CHANNEL_FREQUENCY_STEP_BW_125_US_915,
+                            SPREADING_FACTOR_MAX_BW_125_US_915,
+                            SPREADING_FACTOR_NUM_BW_125_US_915});
+            frequencies.push_back(
+                    std::tuple<uint8_t, float, float, uint8_t, uint8_t> {
+                            CHANNEL_FREQUENCIES_BW_500_UP_US_915,
+                            CHANNEL_FREQUENCY_START_BW_500_UP_US_915,
+                            CHANNEL_FREQUENCY_STEP_BW_500_UP_US_915,
+                            SPREADING_FACTOR_MAX_BW_500_UP_US_915,
+                            SPREADING_FACTOR_NUM_BW_500_UP_US_915});
+
+            break;
+        default:
+            throw std::invalid_argument("Invalid region parameter");
+    }
+
+    // Calculate the channel frequencies and transmission powers associated to spreading factors
+    uint8_t tp = 0;
+    for (unsigned i=0; i<bandwidths_.size(); i++) {
+        float bw   = bandwidths_[i];
+        auto tuple = frequencies[i];
+        int frequencyChannels      = std::get<0>(tuple);
+        float frequencyStart       = std::get<1>(tuple);
+        float frequencyStep        = std::get<2>(tuple);
+
+        for (int j=0; j<frequencyChannels; j++) {
+            if (j == 0)
+                channelFrequencies[bw] = std::vector<float>{frequencyStart + j*frequencyStep};
+            else
+                channelFrequencies[bw].push_back(frequencyStart + j*frequencyStep);
+        }
+    }*/
+
+
+    getPhysicalParameters(region, channelFrequencies);
+
+    // Print the map indexed by bandwidths and values the list of corresponding channel frequencies
+    for (const auto& k : channelFrequencies) {
+        EV << "BW: " << k.first << " -> ";
+        for (float ch : k.second)
+            EV << "Channel frequency: " << ch << ", ";
+        EV << "\n";
+    }//*/
 
 
     // The WATCH() statement below will let you examine the variables under Tkenv
@@ -555,6 +616,10 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
 
     // Check if the message is the timeout for sending NEARBY_GATEWAYS message
     if (msgIn == eventTimeoutNearbyGateways) {
+        // Check if at least a HELLO_GATEWAY message was received
+        if (neighborGatewayAddresses.empty())
+            return;
+
         EV << "Sending NEARBY_GATEWAYS messages...\n";
         sendMessageNearbyGateway();
 
@@ -565,10 +630,6 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
     // Check if the message is a timeout for handling transmissions on the channels
     auto itTX = eventTimeoutChannelTransmissions.find(msgIn);
     if (itTX != eventTimeoutChannelTransmissions.end()) {
-        // Check if at least a HELLO_GATEWAY message was received
-        if (neighborGatewayAddresses.empty())
-            return;
-
         // Get the entry from the map
         auto tuple = itTX->second;
 
@@ -584,6 +645,9 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
 
         // Remove the entry from the map
         eventTimeoutChannelTransmissions.erase(itTX);
+
+        // Delete the timeout message
+        delete msgIn;
 
         return;
     }
@@ -636,7 +700,7 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
             std::list<cPacket*> messagesOut = std::get<0>(mapTcp[destAddress]);
             for (auto msgOut : messagesOut) {
                 // Resend the message to the destination
-                sendMessageIp(msgOut, destAddress);
+                sendMessageIp(msgOut, destAddress, true);
 
                 // Send signal for statistic collection
                 emit(signalSent, 1u);
@@ -677,10 +741,16 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
             if (!appMsg)
                 return;
 
-            // Only HELLO_GATEWAY, HELLO and FORWARD are expected to be retransmitted.
+            // Only HELLO_GATEWAY and STATS messages are expected to be retransmitted.
             // Use the right key
             uint8_t keyMIC[KEY_LORAWAN_SIZE];
             uint8_t port = appMsg->getPort();
+
+            bool isTowardsDevices = true;
+            double delay = 0;
+
+            // Try to retransmit once otherwise if the end device terminates, this msg is repeated infinitely
+            bool restartTimer = false;
 
             switch (port) {
                 case MSG_PORT_HELLO_GATEWAY: {
@@ -701,14 +771,19 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
                     // Get current time in ms
                     simtime_t time = simTime() * 1000;
 
+                    // Get a random delay for transmission in seconds
+                    delay = (rand() + (int) uniform(0, HELLO_GATEWAY_MAX_DELAY)) % HELLO_GATEWAY_MAX_DELAY+1;
+                    //delay = 5; // XXX: for heavy testing
+
                     // Calculate expiration time with a tolerance of 50 ms
-                    simtime_t expirationTime = time + airtimeFrame + 50;
+                    simtime_t expirationTime = time + delay*1000 + airtimeFrame + 50;
 
                     EV << "Time: " << time << " ms\n";
                     EV << "Airtime frame: " << airtimeFrame << " ms\n";
-                    EV << "Time expiration: " << time + airtimeFrame << " ms\n";
-                    EV << "ceil(Time expiration): " << ceil(time + airtimeFrame) << " ms\n";
-                    EV << "ceil(Time expiration): " << ceil(time + airtimeFrame).dbl() << " ms\n";
+                    //EV << "Time expiration: " << time + airtimeFrame << " ms\n";
+                    //EV << "ceil(Time expiration): " << ceil(time + airtimeFrame) << " ms\n";
+                    //EV << "ceil(Time expiration): " << ceil(time + airtimeFrame).dbl() << " ms\n";
+                    EV << "ceil(Time expiration with tolerance): " << ceil(expirationTime).dbl() << " ms\n";
 
                     // Convert time to an array of bytes
                     uint8_t timestampBytes[4] = {};
@@ -721,6 +796,9 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
                     memcpy(&payload[4], address, IPv4_ADDRESS_SIZE);
 
                     setArrayInMessageDownlink(appMsg, &LoRaAppDownlinkFrame::setPayload, payload, sizeof(payload));
+
+                    isTowardsDevices = false;
+                    restartTimer = true;
 
                     break; }
                 case MSG_PORT_STATS: {
@@ -771,14 +849,21 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
             dlMsg->encapsulate(appMsg);
 
             // Recalculate MIC
-            calculateMIC(dlMsg, appMsg, keyMIC);
+            //calculateMIC(dlMsg, appMsg, keyMIC);
+            calculateMIC(dlMsg, keyMIC);
 
             // Do not need to update stored message as the physical pointer is still valid
             //std::get<0>(tuple) = phyMsg;
 
             // Retransmit
             //sendBroadcast(this, phyMsg->dup(), LORA_GATE_OUT);
-            sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, phyMsg->dup(), LORA_GATE_OUT);
+            //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, phyMsg->dup(), LORA_GATE_OUT);
+
+            // Check if the timer has to be restarted
+            if (restartTimer)
+                sendMessageLoRa(phyMsg->dup(), isTowardsDevices, true, delay, true, it->first);
+            else
+                sendMessageLoRa(phyMsg->dup(), isTowardsDevices, false);
 
             // Send signal for statistic collection
             emit(signalSent, 1u);
@@ -789,7 +874,6 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
             networkOut += LORA_FRAME_SIZE_DATALINK_HEADER + LORA_FRAME_SIZE_DATALINK_MIC +
                           LORA_FRAME_SIZE_APP_HEADER + LORA_FRAME_SIZE_APP_PAYLOAD;
 
-            bool restartTimer = true;
 
             // Check if the retransmission involves a HELLO_GATEWAY message
             if (appMsg->getPort() == MSG_PORT_HELLO_GATEWAY) {
@@ -802,16 +886,16 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
 
                     // Schedule timer for allowing to possibly send the NEARBY_GATEWAYS messages
                     // if no HELLO_GATEWAY message was received so far and at least one is received during the timer
-                    scheduleAt(simTime() + 10, eventTimeoutNearbyGateways);
+                    //scheduleAt(simTime() + 10, eventTimeoutNearbyGateways);
+                    scheduleAt(simTime() + HELLO_GATEWAY_MAX_DELAY, eventTimeoutNearbyGateways);
                 }
             }
-            // Try to retransmit once otherwise if the end device terminates, this msg is repeated infinitely
-            else
-                restartTimer = false;
 
+            // Check if the timer has to be restarted
             if (restartTimer) {
                 EV << "Restart the timeout\n";
-                scheduleAt(simTime() + timeoutLoRa, it->first);
+                //scheduleAt(simTime() + timeoutLoRa, it->first);
+                //scheduleAt(simTime() + HELLO_GATEWAY_MAX_DELAY, it->first);
             }
             else {
                 EV << "Cancel the timeout\n";
@@ -835,6 +919,9 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
     }
     else {
         // The message is not a timeout.
+        //======================
+        // Replaced with background noise and interferences
+
         // Lose the message with a certain probability
         //if (uniform(0, 1) < 2) {
         /*if (uniform(0, 1) < MSG_LOSS_PROBABILITY) {
@@ -854,6 +941,7 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
 
             return;
         }*/
+        //======================
 
 
         // Get the gate name and index from which the message is arrived
@@ -868,7 +956,7 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
         if (msgIn->arrivedOn(IP_GATE_IN))
             processMessageFromTransportLayer(msgIn);
         else {
-            if (checkLoRaInterference(msgIn))
+            if (surviveMessageToLoRaInterference(msgIn))
                 processMessageFromLoRaLayer(msgIn);
         }
     }
@@ -963,7 +1051,20 @@ uint8_t LoRaGateway::isValidLoRaFrame(
     *spreadingFactor   = physicalMsg->getSpreadingFactor();
     *transmissionPower = physicalMsg->getTransmissionPower();
     *bandwidth         = physicalMsg->getBandwidth();
-    *channelFrequency  = physicalMsg->getChannelFrequency();
+    //*channelFrequency  = physicalMsg->getChannelFrequency();
+    float channelFrequencyIn  = physicalMsg->getChannelFrequency();
+
+    // Get a random channel frequency on which transmit (based on the SF and current deployment region)
+    // to reduce collisions
+    auto channelFrequencies_ = channelFrequencies[*bandwidth];
+    *channelFrequency   = channelFrequencies_[(rand() + (int) uniform(0, 40)) % channelFrequencies_.size()];
+
+    EV << "Spreading Factor: " << (int) *spreadingFactor << "\n";
+    EV << "Bandwidth: " << *bandwidth << " KHz\n";
+    EV << "Transmission Power: " << (int) *transmissionPower << " dBm\n";
+    EV << "Channel Frequency IN: " << channelFrequencyIn << " MHz\n";
+    EV << "Channel Frequency OUT: " << *channelFrequency << " MHz\n";
+
 
     // The frame may be sent by an end device, gateway or network server.
     // Check if it sent over LoRa
@@ -1529,8 +1630,10 @@ void LoRaGateway::processMessageFromTransportLayer(cMessage* msgIn) {
             // Check if the intersection is already stored as a cluster
             for (auto const& it : clusters) {
                 auto setStored = it.second;
-                if (setIntersection == setStored)
+                if (setIntersection == setStored) {
+                    delete msgIn;
                     return;
+                }
             }
 
             // Temporary store the intersection as a cluster
@@ -1753,7 +1856,8 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
         EV << "Forwarding JOIN_ACCEPT message over LoRa...\n";
         //sendBroadcast(this, msgIn, LORA_GATE_OUT);
-        sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+        //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+        sendMessageLoRa(dynamic_cast<cPacket*> (msgIn), true, false);
 
         // Send signal for statistic collection
         emit(signalSent, 1u);
@@ -1842,8 +1946,10 @@ void LoRaGateway::processMessageFromLoRaLayer(
         std::array<uint8_t, IPv4_ADDRESS_SIZE> voidAddress {0, 0, 0, 0};
 
         // Check if a gateway activation is already running or there exist valid cluster session keys
-        if (map.find(voidAddress) != map.end() || !clusters.empty())
+        if (map.find(voidAddress) != map.end() || !clusters.empty()) {
+            delete msgIn;
             return;
+        }
 
         // Send HELLO_GATEWAY message as it belongs to the same graph connected component where an end device activates
         // but no Join Request message has been received
@@ -1857,6 +1963,8 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
         networkOut += LORA_FRAME_SIZE_DATALINK_HEADER + LORA_FRAME_SIZE_DATALINK_MIC +
                       LORA_FRAME_SIZE_APP_HEADER + IPv4_ADDRESS_SIZE;
+
+        delete msgIn;
     }
     else if (port == MSG_PORT_GENERATE_COMMON_KEY) {
         EV << "Received GENERATE_COMMON_KEY message\n";
@@ -1939,7 +2047,7 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
             networkOut += LORA_FRAME_SIZE_DATALINK_HEADER + LORA_FRAME_SIZE_DATALINK_MIC + LORA_FRAME_SIZE_APP_HEADER + 1;
         }
-        else if (stage == STAGE_ACTIVATED and std::get<3>(tuple) >= RETRANSMISSIONS) {
+        else if (stage == STAGE_ACTIVATED && std::get<3>(tuple) >= RETRANSMISSIONS) {
             // Send ACK only after n retransmissions of end device message to permit receiving NACK
             // in LoRaWAN class A
             EV << "Sending ACK for GENERATE_COMMON_KEY message...\n";
@@ -2029,6 +2137,10 @@ void LoRaGateway::processMessageFromLoRaLayer(
            // Check if the ACK for the STATS message is already arrived
            if (timer == nullptr) {
                EV << "ACK already received for STATS message, ignore the message\n";
+
+               // Do not propagate the uplink counter based on the coverage of multiple gateways
+               // (could be risky for the network server if single coverage)
+
                delete msgIn;
                return;
            }
@@ -2057,6 +2169,9 @@ void LoRaGateway::processMessageFromLoRaLayer(
                    // Decrease occupied storage
                    storageOccupied -= sizeof(cMessage*) + IPv4_ADDRESS_SIZE;
 
+                   // Do not propagate the uplink counter based on the coverage of multiple gateways
+                   // (could be risky for the network server if single coverage)
+
                    delete msgIn;
                    return;
                }
@@ -2083,8 +2198,8 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
            storageOccupied -= sizeof(cMessage*) + IPv4_ADDRESS_SIZE;
 
-           // RIUTILIZZO CODICE: INVECE DI AGGIORNARE VECCHI MESSAGGI, NE CREO NUOVI
-           // QUINDI TIMER INUTILE? NO, PERCHÈ SE FRAME HELLO PERSA, RIMANDA IL VECCHIO MSG
+           // Reuse code: instead of updating old messages, create new ones.
+           // Timer is useful for retrying sending in the event of a lost HELLO message
        }
 
         // The request ID does not match (i.e. new algorithm run) or
@@ -2135,7 +2250,7 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
         //===================
         // Calculate response airtime to calculate the delay of the response
-        EV << "Calculate Time On Air\n";
+        /*EV << "Calculate Time On Air\n";
 
         // Calculate preamble and frame airtime
         auto tuple = calculateTimeOnAir(msgOut);
@@ -2145,7 +2260,7 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
         // Check if computation succeeded
         if (airtimeFrame < 0)
-            return;
+            return;*/
 
         // Calculate arrival time
         /*simtime_t simtime = simTime();
@@ -2154,7 +2269,7 @@ void LoRaGateway::processMessageFromLoRaLayer(
         EV << "Simulation time: " << simtime << "\n";
         EV << "Expected arrival frame time: " << arrivalFrame << "\n";*/
 
-        EV << "Sending STATS message...\n";
+        /*EV << "Sending STATS message...\n";
 
         // Calculate the delay (with tolerance) to send the message in the receive window of the end device
         double delay = RX_DELAY_1 - airtimeFrame + 0.1;
@@ -2164,7 +2279,12 @@ void LoRaGateway::processMessageFromLoRaLayer(
             sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut->dup(), LORA_GATE_OUT);
 
         // For a retransmission attempt, await this roughly identical moment in the future (TX_DELAY) and apply the delay
-        scheduleAt(simTime() + TX_DELAY + delay, eventTimeout);
+        scheduleAt(simTime() + TX_DELAY + delay, eventTimeout);*/
+        //===================
+
+        //===================
+        EV << "Sending STATS message...\n";
+        sendMessageLoRa(msgOut->dup(), true, true, -1, true, eventTimeout);
         //===================
 
         //===================
@@ -2421,16 +2541,17 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
         // Send the message in the receive window of the end device through the sender (peer)
         if (delay > 0)
-            forwardMessageIp(msgOut, "statsMsg",
+            forwardMessageIp(msgOut->dup(), "statsMsg",
                 //selectedGatewayAddress, MSG_PORT_FORWARD);
                 srcAddress, MSG_PORT_FORWARD_OVER_IP, true, delay);
         else
-            forwardMessageIp(msgOut, "statsMsg",
+            forwardMessageIp(msgOut->dup(), "statsMsg",
                 //selectedGatewayAddress, MSG_PORT_FORWARD);
                 srcAddress, MSG_PORT_FORWARD_OVER_IP, true);
 
-        // For a retransmission attempt, await this roughly identical moment in the future (TX_DELAY) and apply the delay
-        scheduleAt(simTime() + TX_DELAY + delay, eventTimeout);
+        // For a retransmission attempt, await this roughly identical moment in the future (TX_DELAY + airtimeFrame) and
+        // apply the delay
+        scheduleAt(simTime() + TX_DELAY + airtimeFrame + delay, eventTimeout);
         //===================
 
 
@@ -2502,8 +2623,7 @@ void LoRaGateway::processMessageFromLoRaLayer(
         if (!dlMsg)
           return;
 
-        // Decapsulate LoRa App layer
-        LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->decapsulate());
+        LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->getEncapsulatedPacket());
         if (!appMsg)
           return;
 
@@ -2515,7 +2635,8 @@ void LoRaGateway::processMessageFromLoRaLayer(
         EV << "Recalculating MIC...\n";
 
         // Recalculate MIC
-        calculateMIC(dlMsg, appMsg, commonSKey.data());
+        //calculateMIC(dlMsg, appMsg, commonSKey.data());
+        calculateMIC(dlMsg, commonSKey.data());
 
 
         // Check custom seq number or
@@ -2534,7 +2655,8 @@ void LoRaGateway::processMessageFromLoRaLayer(
         // forwarded to nearby gateways over LoRa
         EV << "Forwarding STATS message over LoRa...\n";
         //sendBroadcast(this, msgIn, LORA_GATE_OUT);
-        sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+        //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+        sendMessageLoRa(dynamic_cast<cPacket*> (msgIn), true, false);
 
         // Do not schedule retransmission because it is burden of the original sender
 
@@ -2695,7 +2817,7 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
                     //===================
                     // Calculate response airtime to calculate the delay of the response
-                    EV << "Calculate Time On Air\n";
+                    /*EV << "Calculate Time On Air\n";
 
                     // Calculate preamble and frame airtime
                     auto tuple = calculateTimeOnAir(msgOut);
@@ -2708,14 +2830,14 @@ void LoRaGateway::processMessageFromLoRaLayer(
                         return;
 
                     // Calculate arrival time
-                    /*simtime_t simtime = simTime();
-                    simtime_t arrivalFrame = simtime + airtimeFrame;
+                    //simtime_t simtime = simTime();
+                    //simtime_t arrivalFrame = simtime + airtimeFrame;
 
-                    EV << "Simulation time: " << simtime << "\n";
-                    EV << "Expected arrival frame time: " << arrivalFrame << "\n";*/
+                    //EV << "Simulation time: " << simtime << "\n";
+                    //EV << "Expected arrival frame time: " << arrivalFrame << "\n";
 
                     // Calculate the delay (with tolerance) to send the message in the receive window of the end device
-                    double delay = RX_DELAY_1 - airtimeFrame + 0.1;
+                    double delay = RX_DELAY_1 - airtimeFrame + 0.1;*/
                     //===================
 
 
@@ -2724,23 +2846,47 @@ void LoRaGateway::processMessageFromLoRaLayer(
                     // (i.e. the end device is in the range of the gateway)
                     if (commonEndDeviceSKeys.find(endDeviceAddress) != commonEndDeviceSKeys.end()) {
                         // Send the message in the receive window of the end device
-                        //sendDelayedBroadcast(this, std::get<0>(tuple), RX_DELAY_1 + 0.1, LORA_GATE_OUT);
-                        //sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, RX_DELAY_1 + 0.1, LORA_GATE_OUT);
-
-                        if (delay > 0)
+                        //=======================
+                        /*if (delay > 0)
                             sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, delay, LORA_GATE_OUT);
                         else
-                            sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, LORA_GATE_OUT);
+                            sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, LORA_GATE_OUT);*/
+                        //=======================
+
+                        //=======================
+                        sendMessageLoRa(msgOut, true, true);
+                        //=======================
 
                         // Send signal for statistic collection
                         emit(signalSentLoRa, 1u);
                         emit(signalSentLoRaCount, ++messagesSentLoRaCount);
                     }
                     else {
-                        // Send the message in the receive window of the end device through the sender (peer)
-                        //forwardMessageIp(msgOut, "statsUpdateMsg",
-                                //selectedGatewayAddress, MSG_PORT_FORWARD_PAIRING_REQUEST);
-                                //srcAddress, MSG_PORT_FORWARD_OVER_IP, true, RX_DELAY_1 + 0.1);
+
+                        //===================
+                        // Calculate response airtime to calculate the delay of the response
+                        EV << "Calculate Time On Air\n";
+
+                        // Calculate preamble and frame airtime
+                        auto tuple = calculateTimeOnAir(msgOut);
+
+                        // Convert frame time on air from ms to s
+                        double airtimeFrame = std::get<1>(tuple) / 1000;
+
+                        // Check if computation succeeded
+                        if (airtimeFrame < 0)
+                            return;
+
+                        // Calculate arrival time
+                        //simtime_t simtime = simTime();
+                        //simtime_t arrivalFrame = simtime + airtimeFrame;
+
+                        //EV << "Simulation time: " << simtime << "\n";
+                        //EV << "Expected arrival frame time: " << arrivalFrame << "\n";
+
+                        // Calculate the delay (with tolerance) to send the message in the receive window of the end device
+                        double delay = RX_DELAY_1 - airtimeFrame + 0.1;
+                        //===================
 
                         // Send the message in the receive window of the end device through the sender (peer)
                         if (delay > 0)
@@ -2886,10 +3032,10 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
         //===================
         // Calculate response airtime to calculate the delay of the response
-        EV << "Calculate Time On Air\n";
+        /*EV << "Calculate Time On Air\n";
 
         // Calculate preamble and frame airtime
-        auto tupleAirtime = calculateTimeOnAir(std::get<0>(tuple));
+        auto tupleAirtime = calculateTimeOnAir(msgOut);
 
         // Convert frame time on air from ms to s
         double airtimeFrame = std::get<1>(tupleAirtime) / 1000;
@@ -2899,14 +3045,14 @@ void LoRaGateway::processMessageFromLoRaLayer(
             return;
 
         // Calculate arrival time
-        /*simtime_t simtime = simTime();
-        simtime_t arrivalFrame = simtime + airtimeFrame;
+        //simtime_t simtime = simTime();
+        //simtime_t arrivalFrame = simtime + airtimeFrame;
 
-        EV << "Simulation time: " << simtime << "\n";
-        EV << "Expected arrival frame time: " << arrivalFrame << "\n";*/
+        //EV << "Simulation time: " << simtime << "\n";
+        //EV << "Expected arrival frame time: " << arrivalFrame << "\n";
 
         // Calculate the delay (with tolerance) to send the message in the receive window of the end device
-        double delay = RX_DELAY_1 - airtimeFrame + 0.1;
+        double delay = RX_DELAY_1 - airtimeFrame + 0.1;*/
         //===================
 
         //====================
@@ -2914,23 +3060,46 @@ void LoRaGateway::processMessageFromLoRaLayer(
         // (i.e. the end device is in the range of the gateway)
         if (commonEndDeviceSKeys.find(endDeviceAddress) != commonEndDeviceSKeys.end()) {
             // Send the message in the receive window of the end device
-            //sendDelayedBroadcast(this, std::get<0>(tuple), RX_DELAY_1 + 0.1, LORA_GATE_OUT);
-            //sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, std::get<0>(tuple), RX_DELAY_1 + 0.1, LORA_GATE_OUT);
-
-            if (delay > 0)
+            //=======================
+            /*if (delay > 0)
                 sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, std::get<0>(tuple), delay, LORA_GATE_OUT);
             else
-                sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, std::get<0>(tuple), LORA_GATE_OUT);
+                sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, std::get<0>(tuple), LORA_GATE_OUT);*/
+            //=======================
+
+            //=======================
+            sendMessageLoRa(std::get<0>(tuple), true, true);
+            //=======================
 
             // Send signal for statistic collection
             emit(signalSentLoRa, 1u);
             emit(signalSentLoRaCount, ++messagesSentLoRaCount);
         }
         else {
-            // Send the message in the receive window of the end device through the sender (peer)
-            //forwardMessageIp(std::get<0>(tuple), "pairingAcceptMsg",
-                    //selectedGatewayAddress, MSG_PORT_FORWARD_PAIRING_REQUEST);
-                    //srcAddress, MSG_PORT_FORWARD_OVER_IP, true, RX_DELAY_1 + 0.1);
+            //===================
+            // Calculate response airtime to calculate the delay of the response
+            EV << "Calculate Time On Air\n";
+
+            // Calculate preamble and frame airtime
+            auto tupleAirtime = calculateTimeOnAir(std::get<0>(tuple));
+
+            // Convert frame time on air from ms to s
+            double airtimeFrame = std::get<1>(tupleAirtime) / 1000;
+
+            // Check if computation succeeded
+            if (airtimeFrame < 0)
+                return;
+
+            // Calculate arrival time
+            //simtime_t simtime = simTime();
+            //simtime_t arrivalFrame = simtime + airtimeFrame;
+
+            //EV << "Simulation time: " << simtime << "\n";
+            //EV << "Expected arrival frame time: " << arrivalFrame << "\n";
+
+            // Calculate the delay (with tolerance) to send the message in the receive window of the end device
+            double delay = RX_DELAY_1 - airtimeFrame + 0.1;
+            //===================
 
             // Send the message in the receive window of the end device through the sender (peer)
             if (delay > 0)
@@ -3008,8 +3177,7 @@ void LoRaGateway::processMessageFromLoRaLayer(
         if (!dlMsg)
           return;
 
-        // Decapsulate LoRa App layer
-        LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->decapsulate());
+        LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->getEncapsulatedPacket());
         if (!appMsg)
           return;
 
@@ -3021,13 +3189,15 @@ void LoRaGateway::processMessageFromLoRaLayer(
         EV << "Recalculating MIC...\n";
 
         // Recalculate MIC
-        calculateMIC(dlMsg, appMsg, commonSKey.data());
+        //calculateMIC(dlMsg, appMsg, commonSKey.data());
+        calculateMIC(dlMsg, commonSKey.data());
 
         // Propagate back the PAIRING_ACCEPT message in response to the PAIRING_REQUEST message
         // forwarded to nearby gateways over IP
         EV << "Forwarding PAIRING_ACCEPT message over LoRa...\n";
         //sendBroadcast(this, msgIn, LORA_GATE_OUT);
-        sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+        //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+        sendMessageLoRa(dynamic_cast<cPacket*> (msgIn), true, false);
 
         // Do not schedule retransmission because it is burden of the original sender
 
@@ -3073,8 +3243,8 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
             EV << "Forwarding CONNECTION or MAC_CMD message over LoRa\n";
             //sendBroadcast(this, msgIn->dup(), LORA_GATE_OUT);
-            //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn->dup()), LORA_GATE_OUT);
-            sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+            //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+            sendMessageLoRa(dynamic_cast<cPacket*> (msgIn), true, false);
 
             emit(signalSentLoRa, 1u);
             emit(signalSentLoRaCount, ++messagesSentLoRaCount);
@@ -3175,8 +3345,7 @@ void LoRaGateway::processMessageFromLoRaLayer(
             if (!dlMsg)
               return;
 
-            // Decapsulate LoRa App layer
-            LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->decapsulate());
+            LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->getEncapsulatedPacket());
             if (!appMsg)
               return;
 
@@ -3188,13 +3357,15 @@ void LoRaGateway::processMessageFromLoRaLayer(
             EV << "Recalculating MIC...\n";
 
             // Recalculate MIC
-            calculateMIC(dlMsg, appMsg, commonSKey.data());
+            //calculateMIC(dlMsg, appMsg, commonSKey.data());
+            calculateMIC(dlMsg, commonSKey.data());
 
             // Propagate back the GENERATE_ASSOCIATION_KEY message in response to the GENERATE_ASSOCIATION_KEY message
             // forwarded to nearby gateways over IP
             EV << "Forwarding GENERATE_ASSOCIATION_KEY message over LoRa...\n";
             //sendBroadcast(this, msgIn, LORA_GATE_OUT);
-            sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+            //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn), LORA_GATE_OUT);
+            sendMessageLoRa(dynamic_cast<cPacket*> (msgIn), true, false);
 
             // Do not schedule retransmission because it is burden of the original sender
 
@@ -3331,27 +3502,27 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
         //===================
         // Calculate response airtime to calculate the delay of the response
-        EV << "Calculate Time On Air\n";
+        /*EV << "Calculate Time On Air\n";
 
         // Calculate preamble and frame airtime
-        auto tupleAirtime = calculateTimeOnAir(msgOut);
+        auto tuple = calculateTimeOnAir(msgOut);
 
         // Convert frame time on air from ms to s
-        double airtimeFrame = std::get<1>(tupleAirtime) / 1000;
+        double airtimeFrame = std::get<1>(tuple) / 1000;
 
         // Check if computation succeeded
         if (airtimeFrame < 0)
             return;
 
         // Calculate arrival time
-        /*simtime_t simtime = simTime();
-        simtime_t arrivalFrame = simtime + airtimeFrame;
+        //simtime_t simtime = simTime();
+        //simtime_t arrivalFrame = simtime + airtimeFrame;
 
-        EV << "Simulation time: " << simtime << "\n";
-        EV << "Expected arrival frame time: " << arrivalFrame << "\n";*/
+        //EV << "Simulation time: " << simtime << "\n";
+        //EV << "Expected arrival frame time: " << arrivalFrame << "\n";
 
         // Calculate the delay (with tolerance) to send the message in the receive window of the end device
-        double delay = RX_DELAY_1 - airtimeFrame + 0.1;
+        double delay = RX_DELAY_1 - airtimeFrame + 0.1;*/
         //===================
 
         //====================
@@ -3359,22 +3530,45 @@ void LoRaGateway::processMessageFromLoRaLayer(
         // (i.e. the end device is in the range of the gateway)
         if (commonEndDeviceSKeys.find(endDeviceAddress) != commonEndDeviceSKeys.end()) {
             // Send the message in the receive window of the end device
-            //sendDelayedBroadcast(this, std::get<0>(tuple), RX_DELAY_1 + 0.1, LORA_GATE_OUT);
-            //sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, RX_DELAY_1 + 0.1, LORA_GATE_OUT);
-
-            if (delay > 0)
+            //=======================
+            /*if (delay > 0)
                 sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, delay, LORA_GATE_OUT);
             else
-                sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, LORA_GATE_OUT);
+                sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, LORA_GATE_OUT);*/
+            //=======================
+
+            //=======================
+            sendMessageLoRa(msgOut, true, true);
+            //=======================
 
             emit(signalSentLoRa, 1u);
             emit(signalSentLoRaCount, ++messagesSentLoRaCount);
         }
         else {
-            // Send the message in the receive window of the end device through the sender (peer)
-            //forwardMessageIp(msgOut, "generateAssociationKeyACKMsg",
-                    //selectedGatewayAddress, MSG_PORT_FORWARD_PAIRING_REQUEST);
-                    //srcAddress, MSG_PORT_FORWARD_OVER_IP, true, RX_DELAY_1 + 0.1);
+            //===================
+            // Calculate response airtime to calculate the delay of the response
+            EV << "Calculate Time On Air\n";
+
+            // Calculate preamble and frame airtime
+            auto tuple = calculateTimeOnAir(msgOut);
+
+            // Convert frame time on air from ms to s
+            double airtimeFrame = std::get<1>(tuple) / 1000;
+
+            // Check if computation succeeded
+            if (airtimeFrame < 0)
+                return;
+
+            // Calculate arrival time
+            //simtime_t simtime = simTime();
+            //simtime_t arrivalFrame = simtime + airtimeFrame;
+
+            //EV << "Simulation time: " << simtime << "\n";
+            //EV << "Expected arrival frame time: " << arrivalFrame << "\n";
+
+            // Calculate the delay (with tolerance) to send the message in the receive window of the end device
+            double delay = RX_DELAY_1 - airtimeFrame + 0.1;
+            //===================
 
             // Send the message in the receive window of the end device through the sender (peer)
             if (delay > 0)
@@ -3470,10 +3664,10 @@ void LoRaGateway::processMessageFromLoRaLayer(
                 }
 
                 // Forward the message back to the end device
-                EV << "Forwarding DATA_PROFILE message over LoRa\n";
+                EV << "Forwarding DATA_PROFILE message back over LoRa\n";
                 //sendBroadcast(this, msgIn->dup(), LORA_GATE_OUT);
-                sendBroadcastSecurely(
-                        this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn->dup()), LORA_GATE_OUT);
+                //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, dynamic_cast<cPacket*> (msgIn->dup(), LORA_GATE_OUT);
+                sendMessageLoRa(dynamic_cast<cPacket*> (msgIn), true, false);
 
                 // Send signal for statistic collection
                 emit(signalSentLoRa, 1u);
@@ -3554,27 +3748,27 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
         //===================
         // Calculate response airtime to calculate the delay of the response
-        EV << "Calculate Time On Air\n";
+        /*EV << "Calculate Time On Air\n";
 
         // Calculate preamble and frame airtime
-        auto tupleAirtime = calculateTimeOnAir(msgOut);
+        auto tuple = calculateTimeOnAir(msgOut);
 
         // Convert frame time on air from ms to s
-        double airtimeFrame = std::get<1>(tupleAirtime) / 1000;
+        double airtimeFrame = std::get<1>(tuple) / 1000;
 
         // Check if computation succeeded
         if (airtimeFrame < 0)
             return;
 
         // Calculate arrival time
-        /*simtime_t simtime = simTime();
-        simtime_t arrivalFrame = simtime + airtimeFrame;
+        //simtime_t simtime = simTime();
+        //simtime_t arrivalFrame = simtime + airtimeFrame;
 
-        EV << "Simulation time: " << simtime << "\n";
-        EV << "Expected arrival frame time: " << arrivalFrame << "\n";*/
+        //EV << "Simulation time: " << simtime << "\n";
+        //EV << "Expected arrival frame time: " << arrivalFrame << "\n";
 
         // Calculate the delay (with tolerance) to send the message in the receive window of the end device
-        double delay = RX_DELAY_1 - airtimeFrame + 0.1;
+        double delay = RX_DELAY_1 - airtimeFrame + 0.1;*/
         //===================
 
         //====================
@@ -3582,22 +3776,47 @@ void LoRaGateway::processMessageFromLoRaLayer(
         // (i.e. the end device is in the range of the gateway)
         if (commonEndDeviceSKeys.find(endDeviceAddress) != commonEndDeviceSKeys.end()) {
             // Send the message in the receive window of the end device
-            //sendDelayedBroadcast(this, std::get<0>(tuple), RX_DELAY_1 + 0.1, LORA_GATE_OUT);
-            //sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, RX_DELAY_1 + 0.1, LORA_GATE_OUT);
-
-            if (delay > 0)
+            //=======================
+            /*if (delay > 0)
                 sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, delay, LORA_GATE_OUT);
             else
-                sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, LORA_GATE_OUT);
+                sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, LORA_GATE_OUT);*/
+            //=======================
+
+            //=======================
+            sendMessageLoRa(msgOut, true, true);
+            //=======================
 
             emit(signalSentLoRa, 1u);
             emit(signalSentLoRaCount, ++messagesSentLoRaCount);
         }
         else {
-            // Send the message in the receive window of the end device through the sender (peer)
-            //forwardMessageIp(msgOut, "dataProfileACKMsg",
-                    //selectedGatewayAddress, MSG_PORT_FORWARD_PAIRING_REQUEST);
-                    //srcAddress, MSG_PORT_FORWARD_OVER_IP, true, RX_DELAY_1 + 0.1);
+            //===================
+            // Calculate response airtime to calculate the delay of the response
+            EV << "Calculate Time On Air\n";
+
+            // Calculate preamble and frame airtime
+            auto tuple = calculateTimeOnAir(msgOut);
+
+            // Convert frame time on air from ms to s
+            double airtimeFrame = std::get<1>(tuple) / 1000;
+
+            // Check if computation succeeded
+            if (airtimeFrame < 0) {
+                delete msgIn;
+                return;
+            }
+
+            // Calculate arrival time
+            //simtime_t simtime = simTime();
+            //simtime_t arrivalFrame = simtime + airtimeFrame;
+
+            //EV << "Simulation time: " << simtime << "\n";
+            //EV << "Expected arrival frame time: " << arrivalFrame << "\n";
+
+            // Calculate the delay (with tolerance) to send the message in the receive window of the end device
+            double delay = RX_DELAY_1 - airtimeFrame + 0.1;
+            //===================
 
             // Send the message in the receive window of the end device through the sender (peer)
             if (delay > 0)
@@ -3840,6 +4059,7 @@ bool LoRaGateway::isStateChanged(unsigned timestamp) {
     return false;
 }
 
+
 // Send gateway IP address to neighbors for next creating clusters
 void LoRaGateway::sendMessageHelloGateway(
         //uint8_t* endDeviceAddress, uint16_t counter,
@@ -3892,14 +4112,18 @@ void LoRaGateway::sendMessageHelloGateway(
     // Get current time in ms
     simtime_t time = simTime() * 1000;
 
+    // Get a random delay for transmission in seconds
+    double delay = (rand() + (int) uniform(0, HELLO_GATEWAY_MAX_DELAY)) % HELLO_GATEWAY_MAX_DELAY+1;
+    //double delay = 5; // XXX: for heavy testing
+
     // Calculate expiration time with a tolerance of 50 ms
-    simtime_t expirationTime = time + airtimeFrame + 50;
+    simtime_t expirationTime = time + delay*1000 + airtimeFrame + 50;
 
     EV << "Time: " << time << " ms\n";
     EV << "Airtime frame: " << airtimeFrame << " ms\n";
-    EV << "Time expiration: " << time + airtimeFrame << " ms\n";
-    EV << "ceil(Time expiration): " << ceil(time + airtimeFrame) << " ms\n";
-    EV << "ceil(Time expiration): " << ceil(time + airtimeFrame).dbl() << " ms\n";
+    //EV << "Time expiration: " << time + airtimeFrame << " ms\n";
+    //EV << "ceil(Time expiration): " << ceil(time + airtimeFrame) << " ms\n";
+    //EV << "ceil(Time expiration): " << ceil(time + airtimeFrame).dbl() << " ms\n";
     EV << "ceil(Time expiration with tolerance): " << ceil(expirationTime).dbl() << " ms\n";
 
     // Convert time to an array of bytes
@@ -3940,8 +4164,10 @@ void LoRaGateway::sendMessageHelloGateway(
 
     EV << "Sending HELLO_GATEWAY message...\n";
     //sendBroadcast(this, msgOut->dup(), LORA_GATE_OUT);
-    sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut->dup(), LORA_GATE_OUT);
-    scheduleAt(simTime() + 5, eventTimeout);
+    //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut->dup(), LORA_GATE_OUT);
+    //scheduleAt(simTime() + 5, eventTimeout);
+
+    sendMessageLoRa(msgOut->dup(), false, true, delay, true, eventTimeout);
 }
 
 // Share set of collected IP addresses with such addresses
@@ -4025,7 +4251,8 @@ void LoRaGateway::sendMessageCommonKeyAck(
 
     // Send the message in the receive window of the end device
     //sendDelayedBroadcast(this, msgOut, RX_DELAY_1 + 0.1, LORA_GATE_OUT);
-    sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, RX_DELAY_1 + 0.1, LORA_GATE_OUT);
+    //sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, RX_DELAY_1 + 0.1, LORA_GATE_OUT);
+    sendMessageLoRa(msgOut, true, true);
 
     // Do not reschedule the message as it is an ACK
 }
@@ -4081,7 +4308,7 @@ void LoRaGateway::sendMessageConnection(uint8_t* endDeviceAddress, uint8_t reque
         networkServerAddress, MSG_PORT_CONNECTION_GATEWAY, payload, payloadSize, nullptr);
 }
 
-void LoRaGateway::sendMessageDataProfile(uint8_t* endDeviceAddress, const char* dataProfile, int dataProfileSize) {
+/*void LoRaGateway::sendMessageDataProfile(uint8_t* endDeviceAddress, const char* dataProfile, int dataProfileSize) {
     if (!endDeviceAddress || !dataProfile)
         return;
 
@@ -4098,7 +4325,7 @@ void LoRaGateway::sendMessageDataProfile(uint8_t* endDeviceAddress, const char* 
 
     sendMessageTcp("shareDataProfileMsg", "timeoutShareDataProfile",
             networkServerAddress, MSG_PORT_SHARE_DATA_PROFILE, payload, payloadSize, nullptr);
-}
+}*/
 
 // Send processed data of a given end device to network server
 void LoRaGateway::sendMessageProcessedData(
@@ -4203,38 +4430,34 @@ void LoRaGateway::sendMessageTcp(
     mapTcp[destAddress] = tuple;
 
     // Send message to destination
-    sendMessageIp(msgOut, destAddress);
+    sendMessageIp(msgOut, destAddress, true);
 
     scheduleAt(simTime() + timeoutTcp, std::get<1>(tuple));
 }
 
-void LoRaGateway::sendMessageIp(cPacket* msg, std::array<uint8_t, IPv4_ADDRESS_SIZE>& destAddress, simtime_t delay/*=0*/) {
-    //cPacket* msgOut = sendDuplicate ? msg->dup() : msg;
+void LoRaGateway::sendMessageIp(
+        cPacket* msg, std::array<uint8_t, IPv4_ADDRESS_SIZE>& destAddress, bool sendDuplicate, simtime_t delay/*=0*/) {
+    cPacket* msgOut = sendDuplicate ? msg->dup() : msg;
 
     // In OMNeT++ the gateway does not know which is the gate index associated to the IP address.
     // Check if the address is in the routing table to retrieve the gate index
     auto itRT = routingTable.find(destAddress);
     if (itRT != routingTable.end())
-        delay > 0 ? //sendDelayed(msg->dup(), delay, IP_GATE_OUT, itRT->second) :
-                    sendDelayedSecurely(this, eventTimeoutChannelTransmissions, msg->dup(), delay, IP_GATE_OUT, itRT->second) :
-                    //sendDelayedSecurely(this, eventTimeoutChannelTransmissions, msgOut, delay, IP_GATE_OUT, itRT->second) :
-                    //send(msg->dup(), IP_GATE_OUT, itRT->second);
-                    sendSecurely(this, eventTimeoutChannelTransmissions, msg->dup(), IP_GATE_OUT, itRT->second);
-                    //sendSecurely(this, eventTimeoutChannelTransmissions, msgOut, IP_GATE_OUT, itRT->second);
+        delay > 0 ? sendDelayedSecurely(this, eventTimeoutChannelTransmissions, msgOut, delay, IP_GATE_OUT, itRT->second) :
+                    sendSecurely(this, eventTimeoutChannelTransmissions, msgOut, IP_GATE_OUT, itRT->second);
     else
         // The address is not in the routing table, send in broadcast
-        delay > 0 ? //sendDelayedBroadcast(this, msg->dup(), delay, IP_GATE_OUT) :
-                    sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msg->dup(), delay, IP_GATE_OUT) :
-                    //sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, delay, IP_GATE_OUT) :
-                    //sendBroadcast(this, msg->dup(), IP_GATE_OUT);
-                    sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msg->dup(), IP_GATE_OUT);
-                    //sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, IP_GATE_OUT);
+        delay > 0 ? sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, delay, IP_GATE_OUT) :
+                    sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut, IP_GATE_OUT);
 }
 
 // Forward LoRa message to destination over IP
 void LoRaGateway::forwardMessageIp(
         cMessage* msg, const char* name,
         std::array<uint8_t, IPv4_ADDRESS_SIZE>& destAddress, unsigned port, bool reencrypt, simtime_t delay/*=0*/) {
+    // Messages that should not be re-encrypted do not need duplicates
+    bool sendDuplicate = false;
+
     // Check if the message must be decrypted and re-encrypted with a different key
     if (reencrypt) {
         LoRaPhysicalFrame* phyMsg = dynamic_cast<LoRaPhysicalFrame*>(msg);
@@ -4245,8 +4468,7 @@ void LoRaGateway::forwardMessageIp(
         if (!dlMsg)
            return;
 
-        // Decapsulate LoRa App layer
-        LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->decapsulate());
+        LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->getEncapsulatedPacket());
         if (!appMsg)
            return;
 
@@ -4278,7 +4500,8 @@ void LoRaGateway::forwardMessageIp(
         EV << "Recalculating MIC...\n";
 
         // Recalculate MIC
-        calculateMIC(dlMsg, appMsg, key);
+        //calculateMIC(dlMsg, appMsg, key);
+        calculateMIC(dlMsg, key);
     }
 
     // Create UDP/IP packet
@@ -4294,8 +4517,7 @@ void LoRaGateway::forwardMessageIp(
         msgOut);
 
     // Send the message to the destination
-    sendMessageIp(msgOut, destAddress, delay);
-    // TODO: messages without reencrypt do not need duplicates
+    sendMessageIp(msgOut, destAddress, sendDuplicate, delay);
 }
 
 // Forward LoRa message to destination over IP
@@ -4316,8 +4538,7 @@ void LoRaGateway::forwardMessageToNeighbors(cMessage* msg, uint8_t* decryptKey) 
     if (!dlMsg)
        return;
 
-    // Decapsulate LoRa App layer
-    LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->decapsulate());
+    LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->getEncapsulatedPacket());
     if (!appMsg)
        return;
 
@@ -4338,7 +4559,8 @@ void LoRaGateway::forwardMessageToNeighbors(cMessage* msg, uint8_t* decryptKey) 
        EV << "Recalculating MIC...\n";
 
        // Recalculate MIC
-       calculateMIC(dlMsg, appMsg, commonSKey.data());
+       //calculateMIC(dlMsg, appMsg, commonSKey.data());
+       calculateMIC(dlMsg, commonSKey.data());
 
        // Forward to peers in the cluster
        for (auto neighborAddress : itClusters.second)
@@ -4346,63 +4568,187 @@ void LoRaGateway::forwardMessageToNeighbors(cMessage* msg, uint8_t* decryptKey) 
     }
 }
 
-uint8_t LoRaGateway::getCpuLoad() {
-    return (uint8_t) (cpuLoad * 100);
-    //return 100; // XXX: for testing no gateway metrics requirements
-}
+// Send message over LoRa where
+// - isTowardsDevices denotes if the dest of the message are end devices or not
+// - sendDuplicate denotes if the message must be duplicated
+// - delayTransmission denotes if the message trasmission must be delayed
+// - delay denotes the message transmission delay of HELLO_GATEWAY message
+// - retransmit denotes if the message must be retransmitted
+// - eventTimeout denotes the timeout for retransmission
+void LoRaGateway::sendMessageLoRa(
+        cPacket* msg, bool isTowardsDevices, bool delayTransmission, double delay/*=0*/,
+        bool retransmit/*=false*/, cMessage* eventTimeout/*=nullptr*/) {
+    if (!msg || (!isTowardsDevices && delay == 0) || (retransmit && !eventTimeout))
+        return;
 
-uint8_t LoRaGateway::getGpuLoad() {
-    return (uint8_t) (gpuLoad * 100);
-}
+    EV << "Calculate Time On Air\n";
 
-uint8_t LoRaGateway::getRamLoad() {
-    return (uint8_t) (ramLoad * 100);
-}
+    // Calculate preamble and frame airtime
+    auto tuple = calculateTimeOnAir(msg);
 
-uint8_t LoRaGateway::getStorageLoad() {
-    return (uint8_t) ((double)storageOccupied/STORAGE_SIZE * 100.0);
-}
+    // Convert frame time on air from ms to s
+    double airtimePreamble = std::get<0>(tuple) / 1000;
+    double airtimeFrame    = std::get<1>(tuple) / 1000;
 
-uint8_t LoRaGateway::getNetworkIn() {
-    return (uint8_t) networkIn / 1000;
-}
+    // Check if computation succeeded
+    if (airtimePreamble < 0 || airtimeFrame < 0)
+        return;
 
-uint8_t LoRaGateway::getNetworkOut() {
-    return (uint8_t) networkOut / 1000;
-}
+    // Calculate arrival times
+    simtime_t simtime = simTime();
+    simtime_t arrivalPreamble = simtime + airtimePreamble;
+    simtime_t arrivalFrame    = simtime + airtimeFrame;
 
-bool LoRaGateway::checkResources() {
-    return getCpuLoad() < CPU_LOAD_THRESHOLD &&
-           getGpuLoad() < GPU_LOAD_THRESHOLD &&
-           getRamLoad() < RAM_LOAD_THRESHOLD &&
-           getStorageLoad() < STORAGE_LOAD_THRESHOLD &&
-           getNetworkIn() < NETWORK_IN_THRESHOLD &&
-           getNetworkOut() < NETWORK_OUT_THRESHOLD;
-}
+    simtime_t sendingTime = simtime;
 
-void LoRaGateway::updateResources() {
-    // xxx: uniform vs normal
-    cpuLoad = uniform(0, 0.03); // 0.08
-    gpuLoad = uniform(0, 0.02); // 0.05
-    ramLoad = uniform(0.04, 0.06); //0.05;
+    // Calculate the delay (with tolerance) to send the message in the receive window of the end device or
+    // set a random delay if the message is towards gateways to reduce collisions
+    //double delay = isTowardsDevices ? RX_DELAY_1 - airtimeFrame + 0.1 : 5;
+    //double delay = isTowardsDevices ? RX_DELAY_1 - airtimeFrame + 0.1 :
+    //                                  (rand() + (int) uniform(0, HELLO_GATEWAY_MAX_DELAY)) % HELLO_GATEWAY_MAX_DELAY+1;
 
-    for (unsigned i=1; i <= associations.size(); i++) {
-        //cpuLoad += uniform(0.01, 0.15);
-        //gpuLoad += uniform(0.01, 0.1);
-        //ramLoad += uniform(0.02, 0.04);
+    delay = isTowardsDevices ? RX_DELAY_1 - airtimeFrame + 0.1 : delay;
 
-        cpuLoad += uniform(0.01, 0.03);
-        gpuLoad += uniform(0.01, 0.02);
-        ramLoad += uniform(0.01, 0.02);
+    if (delayTransmission && delay > 0) {
+        arrivalPreamble += delay;
+        arrivalFrame    += delay;
+        sendingTime     += delay;
     }
 
-    networkIn  = 0;
-    networkOut = 0;
+    EV << "Simulation time: " << simtime << "\n";
+    EV << "Sending time: " << sendingTime << "\n";
+    EV << "Expected arrival preamble time: " << arrivalPreamble << "\n";
+    EV << "Expected arrival frame time: " << arrivalFrame << "\n";
+
+
+    if (delayTransmission) {
+        if (delay > 0)
+            sendDelayedBroadcastSecurely(this, eventTimeoutChannelTransmissions, msg, delay, LORA_GATE_OUT);
+        else
+            sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msg, LORA_GATE_OUT);
+    }
+    else
+        sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msg, LORA_GATE_OUT);
+
+    if (retransmit)
+        // For a retransmission attempt towards end devices,
+        // await this roughly identical moment in the future (TX_DELAY + airtimeFrame) and apply the delay.
+        // For a retransmission attempt towards gateways,
+        isTowardsDevices ? scheduleAt(simTime() + TX_DELAY + airtimeFrame + delay, eventTimeout) :
+                           scheduleAt(simTime() + HELLO_GATEWAY_MAX_DELAY, eventTimeout);
+
+
+    EV << "Notify neighbors\n";
+    EV << "neighborGatewaysInterferences.size(): " << neighborGatewaysInterferences.size() << "\n";
+
+    // Notify neighbors for handling interferences
+    notifyNeighborGateways(msg, this, sendingTime, arrivalPreamble, arrivalFrame);
+
+    EV << "Verify Transmission Interference\n";
+
+    // Verify if the message interferes with previously received messages
+    // To apply multiple interference to a message use the ID that is shared among duplicates available to neighbors
+    // instead of the pointer that is related to the particular duplicate
+    verifyTransmissionInterference(msg, sendingTime, isTowardsDevices);
 }
 
+// Notify neighbors for handling interferences
+void LoRaGateway::notifyNeighborGateways(
+        cPacket* msg, cModule* sender, simtime_t sendingTime, simtime_t arrivalPreamble, simtime_t arrivalFrame) {
+    // Notify neighbor end devices about the transmitted message
+    for (auto neighbor : neighborGatewaysInterferences)
+        dynamic_cast<LoRaGateway*>(neighbor)->receiveNotification(msg, sender, sendingTime, arrivalPreamble, arrivalFrame);
+}
+
+// Notify neighbors for handling interferences
+void LoRaGateway::notifyNeighborDevices(
+        //cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages) {
+        cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages) {
+    for (auto neighbor : neighborDevicesInterferences)
+        dynamic_cast<LoRaEndDevice*>(neighbor)->handleInterferenceDownlink(msgInterference, this, interferedMessages);
+}
+
+// Notify neighbors for handling interferences
+void LoRaGateway::notifyNeighborGateways(
+        //cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages) {
+        cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages) {
+    for (auto neighbor : neighborGatewaysInterferences)
+        dynamic_cast<LoRaGateway*>(neighbor)->handleInterferenceDownlink(msgInterference, this, interferedMessages);
+}
+
+// Verify if the gateway transmission interferes with at least a message collected
+// via notification by a neighbor and notify the gateways in the radio range
+void LoRaGateway::verifyTransmissionInterference(cPacket* msg, simtime_t sendingTime, bool isTowardsDevices) {
+    // List of possible interfered messages composed of tuples
+    // (interfered message, is interfering during preamble?)
+    // to send just a signal instead of one per possible interference
+    //std::list<std::tuple<cPacket*, int, bool>> interferedMessages;
+    std::list<std::tuple<cPacket*, cModule*, bool>> interferedMessages;
+
+    //EV << "verifyTransmissionInterference - Msg sending time: " << msg->getSendingTime() << "\n";
+    EV << "verifyTransmissionInterference - Msg sending time: " << sendingTime << "\n";
+
+    int removals = 0;
+    for (auto tuple : neighborMessages) {
+        EV << "verifyTransmissionInterference - Neighbor msg sending time: " << std::get<1>(tuple) << "\n";
+        EV << "verifyTransmissionInterference - Neighbor msg preamble expiration: " << std::get<2>(tuple) << "\n";
+        EV << "verifyTransmissionInterference - Neighbor msg frame expiration: " << std::get<3>(tuple) << "\n";
+
+        cPacket* neighborMsg = std::get<0>(tuple);
+        //int neighborId       = neighborMsg->getSenderModuleId();
+        //cModule* neighbor  = neighborMsg->getSenderModule();
+        cModule* neighbor  = std::get<1>(tuple);
+        EV << "verifyTransmissionInterference - Neighbor: " << neighbor << "\n";
+
+        // Verify if the message is transmitted after the one sent by the neighbor
+        if (sendingTime < std::get<2>(tuple))
+            continue;
+
+        // Verify if a possible interference occurred during the preamble transmission
+        if (sendingTime <= std::get<3>(tuple))
+            //interferedMessages.push_back(std::tuple<cPacket*, int, bool> {neighborMsg, neighborId, true});
+            interferedMessages.push_back(std::tuple<cPacket*, cModule*, bool> {neighborMsg, neighbor, true});
+
+        // Verify if a possible interference occurred during the header+payload transmission
+        else if (sendingTime <= std::get<4>(tuple))
+            //interferedMessages.push_back(std::tuple<cPacket*, int, bool> {neighborMsg, neighborId, false});
+            interferedMessages.push_back(std::tuple<cPacket*, cModule*, bool> {neighborMsg, neighbor, false});
+
+        else if (simTime() >= std::get<2>(tuple))
+            // The tuple is expired, remove the head of the list since tuples are appended at the end of the list
+            //neighborMessages.pop_front(); // QUI CRASHA
+            removals++;
+    }
+
+    EV << "Items to remove from neighborMessages: " << removals << "\n";
+
+    // TODO: Integrate the removal into above iteration
+    for (int i=0; i < removals; i++)
+        neighborMessages.pop_front();
+
+    // Check if a possible interference occurred
+    if (!interferedMessages.empty()) {
+        // Check if the message is towards end devices
+        if (isTowardsDevices) {
+            // Notify neighbor devices of the possible interferences
+            EV << "Handle possible interference on neighbor devices\n";
+            notifyNeighborDevices(msg, interferedMessages);
+        }
+        else {
+            // Handle possible downlink interferences
+            //EV << "Handle possible interference on the current gateway (self-interference)\n";
+            //handleInterference(msg, interferedMessages, false);
+            // Assume self-interference cancellation for full-duplex LoRa communication
+
+            // Notify neighbor gateways of the possible interferences
+            EV << "Handle possible interference on neighbor gateways\n";
+            notifyNeighborGateways(msg, interferedMessages);
+        }
+    }
+}
 
 // Return true if the message survives to interference, false otherwise
-bool LoRaGateway::checkLoRaInterference(cMessage* msg) {
+bool LoRaGateway::surviveMessageToLoRaInterference(cMessage* msg) {
     if (!msg)
         return false;
 
@@ -4431,7 +4777,7 @@ bool LoRaGateway::checkLoRaInterference(cMessage* msg) {
         EV << "Message RSSI: " << rssi << "\n";
 
         // Apply external noise and insert the message in interferences
-        tuple = applyExternalNoise(msg, rssi);
+        tuple = applyExternalNoise(msg, rssi, interferences, EV);
         if (std::get<1>(tuple) < 0)
             return false;
     }
@@ -4469,8 +4815,65 @@ bool LoRaGateway::checkLoRaInterference(cMessage* msg) {
     return true;
 }
 
+
+uint8_t LoRaGateway::getCpuLoad() {
+    return (uint8_t) (cpuLoad * 100);
+    //return 100; // XXX: for testing no gateway metrics requirements
+}
+
+uint8_t LoRaGateway::getGpuLoad() {
+    return (uint8_t) (gpuLoad * 100);
+}
+
+uint8_t LoRaGateway::getRamLoad() {
+    return (uint8_t) (ramLoad * 100);
+}
+
+uint8_t LoRaGateway::getStorageLoad() {
+    return (uint8_t) ((double)storageOccupied/STORAGE_SIZE * 100.0);
+}
+
+uint8_t LoRaGateway::getNetworkIn() {
+    return (uint8_t) networkIn / 1000;
+}
+
+uint8_t LoRaGateway::getNetworkOut() {
+    return (uint8_t) networkOut / 1000;
+}
+
+bool LoRaGateway::checkResources() {
+    return getCpuLoad()     < CPU_LOAD_THRESHOLD     &&
+           getGpuLoad()     < GPU_LOAD_THRESHOLD     &&
+           getRamLoad()     < RAM_LOAD_THRESHOLD     &&
+           getStorageLoad() < STORAGE_LOAD_THRESHOLD &&
+           getNetworkIn()   < NETWORK_IN_THRESHOLD   &&
+           getNetworkOut()  < NETWORK_OUT_THRESHOLD;
+}
+
+void LoRaGateway::updateResources() {
+    // xxx: uniform vs normal
+    cpuLoad = uniform(0, 0.03); // 0.08
+    gpuLoad = uniform(0, 0.02); // 0.05
+    ramLoad = uniform(0.04, 0.06); //0.05;
+
+    for (unsigned i=1; i <= associations.size(); i++) {
+        //cpuLoad += uniform(0.01, 0.15);
+        //gpuLoad += uniform(0.01, 0.1);
+        //ramLoad += uniform(0.02, 0.04);
+
+        cpuLoad += uniform(0.01, 0.03);
+        gpuLoad += uniform(0.01, 0.02);
+        ramLoad += uniform(0.01, 0.02);
+    }
+
+    networkIn  = 0;
+    networkOut = 0;
+}
+
+
+
 // Calculate BER probability according to the experimental BER curves
-float LoRaGateway::calculateProbabilityBER(int maxBer, int snrThreshold, int snr) {
+/*float LoRaGateway::calculateProbabilityBER(int maxBer, int snrThreshold, int snr) {
     //EV << "maxBer: " << maxBer << "\n";
     //EV << "snrThreshold: " << snrThreshold << "\n";
     //EV << "snr: " << snr << "\n";
@@ -4538,9 +4941,9 @@ std::tuple<double, float> LoRaGateway::applyExternalNoise(cMessage* msg, int rss
         std::random_device rd {};
         std::mt19937 generator {rd()};
 
-        // Con questi parametri la curva non è totalmente corretta perchè l'intervallo è [-108, -98]
-        // ma ci va vicino. Penso che per essere più corretta serve GEV type II e non type I ma
-        // non è definita in c++ quindi ok così
+        // With the following parameters the curve is not exactly equal to the experimental one because
+        // the interval is [-108, -98].
+        // It requires GEV type II instead of GEV type I but it is not defined in C++, so, use this approximation
         float location = -105;
         float scale    = 1.65;
         std::extreme_value_distribution<float> distribution(location, scale);
@@ -4691,7 +5094,7 @@ std::tuple<double, float> LoRaGateway::applyExternalNoise(cMessage* msg, int rss
         return std::tuple<int, float> {-1, -1};
 
     return applyExternalNoise(msg, rssi, msg_->getSpreadingFactor(), msg_->getBandwidth());
-}
+}*/
 
 
 // ************** PUBLIC METHODS **************
@@ -4714,33 +5117,78 @@ const char* LoRaGateway::getLoRaGateBasename() {
     return LORA_GATE_BASENAME;
 }
 
-
-void LoRaGateway::addNeighborDevice(int neighborId) {
-    if (neighborId < 0)
+//void LoRaGateway::addNeighborDevice(int neighborId) {
+void LoRaGateway::addNeighborDevice(cModule* neighbor) {
+    //if (neighborId < 0)
+    if (!neighbor)
         return;
 
     EV << "============= addNeighborDevice =============\n";
 
-    EV << "neighborId: " << neighborId << "\n";
-    neighborDevicesInterferences.insert(neighborId);
+    //EV << "neighborId: " << neighborId << "\n";
+    EV << "neighbor->getId(): " << neighbor->getId() << "\n";
+    neighborDevicesInterferences.insert(neighbor);
 
     EV << "=====================================\n";
 }
 
+void LoRaGateway::addNeighborGateway(LoRaGateway* neighbor) {
+    if (!neighbor)
+        return;
+
+    EV << "============= addNeighborGateway =============\n";
+
+    EV << "neighbor->getId(): " << neighbor->getId() << "\n";
+    neighborGatewaysInterferences.insert(neighbor);
+
+    EV << "=====================================\n";
+}
+
+void LoRaGateway::receiveNotification(
+        cPacket* msg, cModule* sender, simtime_t sendingTime, simtime_t arrivalPreamble, simtime_t arrivalFrame) {
+    if (!msg)
+        return;
+
+    //EV << "============= receiveNotification =============\n";
+    // Append the message to the list of messages sent by neighbors
+    neighborMessages.push_back(
+            std::tuple<cPacket*, cModule*, simtime_t, simtime_t, simtime_t> {msg, sender, sendingTime, arrivalPreamble, arrivalFrame});
+
+    // Handle interferences from the transmitter of the new message and non from the interfered
+    // as A interfering with B implies B interfered by A, so, it is sufficient to handle it once
+    //EV << "=====================================\n";
+
+}
+
+
 
 void LoRaGateway::handleInterference(
-        //cPacket* msgInterference, std::list<std::tuple<cPacket*, bool>>& interferedMessages) {
-        cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages) {
+        //cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages) {
+        cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages,
+        int rssiInterference, bool isUplink) {
     if (!msgInterference || interferedMessages.size() == 0)
         return;
 
     //EV << "handleInterference - msgInterference->getSenderModuleId(): " << msgInterference->getSenderModuleId() << "\n";
 
-    // Check if the end device is in the radio range (should be)
-    if (neighborDevicesInterferences.find(msgInterference->getSenderModuleId()) == neighborDevicesInterferences.end())
-        return;
+    /*if (isUplink) {
+        // Check if the end device is in the radio range (should be)
+        //if (neighborDevicesInterferences.find(msgInterference->getSenderModuleId()) == neighborDevicesInterferences.end())
+        if (neighborDevicesInterferences.find(msgInterference->getSenderModule()) == neighborDevicesInterferences.end())
+            return;
+    }
+    else {
+        // Check if the gateway is in the radio range (should be)
+        //cModule* sender = msgInterference->getSenderModule();
+        //if (sender != this && neighborGatewaysInterferences.find(sender) == neighborGatewaysInterferences.end())
+        // Assume self-interference cancellation
+
+        if (neighborGatewaysInterferences.find(msgInterference->getSenderModule()) == neighborGatewaysInterferences.end())
+            return;
+    }*/
 
     EV << "============= handleInterference =============\n";
+    EV << "Gateway that manages the interference: " << this << "\n";
 
     // Get possible interferer message parameters (sent by source module)
     LoRaPhysicalFrame* msgInterference_ = dynamic_cast<LoRaPhysicalFrame*>(msgInterference);
@@ -4758,15 +5206,28 @@ void LoRaGateway::handleInterference(
     // Apply external noise to the possible interferer message.
     // This cannot be applied twice or more because only this time it is the interferer
 
-    // Get possible interferer message RSSI
-    LoRaEndDevice* deviceInterference = dynamic_cast<LoRaEndDevice*>(msgInterference_->getSenderModule());
-    if (!deviceInterference)
-        return;
+    /*int rssiInterference = 0;
 
-    int rssiInterference = calculateRSSI(this, deviceInterference->getPosX(), deviceInterference->getPosY(), posX, posY, EV);
-    EV << "Possible interference RSSI: " << rssiInterference << "\n";
+    if (isUplink) {
+        // Get possible interferer message RSSI
+        LoRaEndDevice* deviceInterference = dynamic_cast<LoRaEndDevice*>(msgInterference_->getSenderModule());
+        if (!deviceInterference)
+            return;
 
-    auto tupleInterference = applyExternalNoise(msgInterference_, rssiInterference, sfInterference, bwInterference);
+        rssiInterference = calculateRSSI(this, deviceInterference->getPosX(), deviceInterference->getPosY(), posX, posY, EV);
+        EV << "Possible interference RSSI: " << rssiInterference << "\n";
+    }
+    else {
+        // Get possible interferer message RSSI
+        LoRaGateway* gatewayInterference = dynamic_cast<LoRaGateway*>(msgInterference_->getSenderModule());
+        if (!gatewayInterference)
+            return;
+
+        rssiInterference = calculateRSSI(this, gatewayInterference->getPosX(), gatewayInterference->getPosY(), posX, posY, EV);
+        EV << "Possible interference RSSI: " << rssiInterference << "\n";
+    }*/
+
+    auto tupleInterference = applyExternalNoise(msgInterference_, rssiInterference, sfInterference, bwInterference, interferences, EV);
     if (std::get<1>(tupleInterference) < 0)
         return;
 
@@ -4777,11 +5238,22 @@ void LoRaGateway::handleInterference(
     // (collected via notifications by the end device source before it sent its message and
     // other time on airs are not ended)
     for (auto tuple : interferedMessages) {
-        //EV << "Interfered device ID: " << std::get<1>(tuple) << "\n";
+        cModule* interfered = std::get<1>(tuple);
 
-        // Check if the end device is in the radio range
-        if (neighborDevicesInterferences.find(std::get<1>(tuple)) == neighborDevicesInterferences.end())
-            continue;
+        if (isUplink) {
+            // Check if the end device is in the radio range
+            if (neighborDevicesInterferences.find(interfered) == neighborDevicesInterferences.end())
+                continue;
+        }
+        else {
+            // Check if the gateway is in the radio range
+            //cModule* gateway = std::get<1>(tuple);
+            //if (gateway != this && neighborGatewaysInterferences.find(gateway) == neighborGatewaysInterferences.end())
+            // Assume self-interference cancellation
+
+            if (neighborGatewaysInterferences.find(interfered) == neighborGatewaysInterferences.end())
+                continue;
+        }
 
         // Get possible interfered message parameters
         LoRaPhysicalFrame* msgSignal = dynamic_cast<LoRaPhysicalFrame*>(std::get<0>(tuple));
@@ -4797,57 +5269,29 @@ void LoRaGateway::handleInterference(
         EV << "Signal bandwidth: " << bwSignal << "\n";
         EV << "Signal ch frequency: " << cfSignal << "\n";
 
-        //===================================
-        /*LoRaEndDevice* deviceSignal = dynamic_cast<LoRaEndDevice*>(msgSignal->getSenderModule());
-        if (!deviceSignal)
-            return;
 
-        int rssiSignal = calculateRSSI(this, deviceSignal->getPosX(), deviceSignal->getPosY(), posX, posY, EV);
-        EV << "Signal RSSI: " << rssiSignal << "\n";
+        int rssiSignal = 0;
 
-        //int snrSignal = applyExternalNoise(msgSignal, rssiSignal, sfSignal, bwSignal);
-
-        // Check if noise has already been applied to this signal
-        auto it = interferences.find(msgSignal);
-        auto tupleSignal = it == interferences.end() ?
-                applyExternalNoise(msgSignal, rssiSignal, sfSignal, bwSignal) : it->second;//*/
-        //===================================
-
-        //===================================
-        /*std::tuple<int, float> tupleSignal;
-
-        // Check if noise has already been applied to this signal
-        //auto it = interferences.find(msgSignal);
-        long signalId = msgSignal->getTreeId();
-        auto it = interferences.find(signalId);
-
-        if (it == interferences.end()) {
+        if (isUplink) {
             // Get possible interfered message RSSI
-            LoRaEndDevice* deviceSignal = dynamic_cast<LoRaEndDevice*>(msgSignal->getSenderModule());
+            //LoRaEndDevice* deviceSignal = dynamic_cast<LoRaEndDevice*>(msgSignal->getSenderModule());
+            LoRaEndDevice* deviceSignal = dynamic_cast<LoRaEndDevice*>(interfered);
             if (!deviceSignal)
                 return;
 
-            int rssiSignal = calculateRSSI(this, deviceSignal->getPosX(), deviceSignal->getPosY(), posX, posY, EV);
+            rssiSignal = calculateRSSI(this, deviceSignal->getPosX(), deviceSignal->getPosY(), posX, posY, EV);
             EV << "Signal RSSI: " << rssiSignal << "\n";
-
-            tupleSignal = applyExternalNoise(msgSignal, rssiSignal, sfSignal, bwSignal);
-            if (std::get<1>(tupleSignal) < 0)
-                continue;
         }
         else {
-            tupleSignal = it->second;
-            EV << "Signal SINR: " << std::get<0>(tupleSignal) << "\n";
-        }*/
-        //===================================
+            // Get possible interfered message RSSI
+            //LoRaGateway* gatewaySignal = dynamic_cast<LoRaGateway*>(msgSignal->getSenderModule());
+            LoRaGateway* gatewaySignal = dynamic_cast<LoRaGateway*>(interfered);
+            if (!gatewaySignal)
+                return;
 
-        //===================================
-        // Get possible interfered message RSSI
-        LoRaEndDevice* deviceSignal = dynamic_cast<LoRaEndDevice*>(msgSignal->getSenderModule());
-        if (!deviceSignal)
-            return;
-
-        int rssiSignal = calculateRSSI(this, deviceSignal->getPosX(), deviceSignal->getPosY(), posX, posY, EV);
-        EV << "Signal RSSI: " << rssiSignal << "\n";
+            rssiSignal = calculateRSSI(this, gatewaySignal->getPosX(), gatewaySignal->getPosY(), posX, posY, EV);
+            EV << "Signal RSSI: " << rssiSignal << "\n";
+        }
 
         std::tuple<double, float> tupleSignal;
 
@@ -4857,7 +5301,7 @@ void LoRaGateway::handleInterference(
         auto it = interferences.find(signalId);
 
         if (it == interferences.end()) {
-            tupleSignal = applyExternalNoise(msgSignal, rssiSignal, sfSignal, bwSignal);
+            tupleSignal = applyExternalNoise(msgSignal, rssiSignal, sfSignal, bwSignal, interferences, EV);
             if (std::get<1>(tupleSignal) < 0)
                 continue;
         }
@@ -4865,7 +5309,6 @@ void LoRaGateway::handleInterference(
             tupleSignal = it->second;
             EV << "NoiseAndInterference power: " << std::get<0>(tupleSignal) << " mW\n";
         }
-        //===================================
 
         // Check if the two messages are transmitted using the same bandwidth
         if (bwInterference == bwSignal) {
@@ -4874,8 +5317,6 @@ void LoRaGateway::handleInterference(
             // Check if the two messages are transmitted using the same channel
             if (cfInterference == cfSignal) {
                 EV << "The signal and the possible interference are transmitted in the same ch frequency!\n";
-
-                //handleIntraChannelInterference();
 
                 // Signal Interference Ratio calculated in dB
                 //const int sir = std::get<0>(tupleSignal) - std::get<0>(tupleInterference);
@@ -4901,18 +5342,11 @@ void LoRaGateway::handleInterference(
                         if (sir >= sirThreshold) {
                             // Interference is dropped,
                             // Signal is dropped with a probability of 8-15%
-
-                            //interferences[msgInterference] = 1;
-                            //interferences[msgSignal]       += 0.1;
-
                             std::get<1>(tupleSignal)       += 0.1;
                             std::get<1>(tupleInterference) = 1;
                         }
                         else {
                             // Signal and Interference are dropped
-                            //interferences[msgInterference] = 1;
-                            //interferences[msgSignal]       = 1;
-
                             std::get<1>(tupleSignal)       = 1;
                             std::get<1>(tupleInterference) = 1;
                         }
@@ -4921,17 +5355,11 @@ void LoRaGateway::handleInterference(
                         if (sir >= sirThreshold) {
                             // Signal is dropped with a probability of 0-5%,
                             // Interference is dropped
-                            //interferences[msgInterference] = 1;
-                            //interferences[msgSignal]       += 0.03;
-
                             std::get<1>(tupleSignal)      += 0.03;
                             std::get<1>(tupleInterference) = 1;
                         }
                         else {
                             // Signal and Interference are dropped
-                            //interferences[msgInterference] = 1;
-                            //interferences[msgSignal]       = 1;
-
                             std::get<1>(tupleSignal)       = 1;
                             std::get<1>(tupleInterference) = 1;
                         }
@@ -4981,18 +5409,12 @@ void LoRaGateway::handleInterference(
                     if (sir >= sirThreshold) {
                         // Signal survives, Interference?
                         // Based on same SF study, interferer is always dropped
-                        //interferences[msgInterference] = 1;
-                        //interferences[msgSignal]       += 0;
-
                         //std::get<1>(tupleSignal)       += 0;
                         std::get<1>(tupleInterference) = 1;
                     }
                     else {
                         // Signal is dropped, Interference?
                         // Based on same SF study, interferer is always dropped
-                        //interferences[msgInterference] = 1;
-                        //interferences[msgSignal]       = 1;
-
                         std::get<1>(tupleSignal)       = calculateProbabilityBER(maxBer, sirThreshold, sir);
                         std::get<1>(tupleInterference) = 1;
                     }
@@ -5012,8 +5434,6 @@ void LoRaGateway::handleInterference(
 
                 EV << "The signal and the possible interference are transmitted in different ch frequencies!\n";
 
-                //handleInterChannelInterference();
-
                 if (isInterferingPreamble && sfInterference == sfSignal) {
                     EV << "The signal and the possible interference are transmitted with the same spreading factor!\n";
 
@@ -5027,16 +5447,10 @@ void LoRaGateway::handleInterference(
                             // Interference between 95% and 99%
                             // SF12 and bw 500 KHz -> interference 85%
                             if (bwInterference == BANDWIDTH_500) {
-                                //interferences[msgInterference] += 0.85;
-                                //interferences[msgSignal] += 0.85;
-
                                 std::get<1>(tupleSignal)       += 0.85;
                                 std::get<1>(tupleInterference) += 0.85;
                             }
                             else {
-                                //interferences[msgInterference] += 0.97;
-                                //interferences[msgSignal] += 0.97;
-
                                 std::get<1>(tupleSignal)       += 0.97;
                                 std::get<1>(tupleInterference) += 0.97;
                             }
@@ -5056,20 +5470,14 @@ void LoRaGateway::handleInterference(
 
                                 switch (sfInterference) {
                                     case 12:
-                                        //interferences[msgInterference] += 0.3;
-                                        //interferences[msgSignal]       += 0.3;
                                         std::get<1>(tupleSignal)       += 0.3;
                                         std::get<1>(tupleInterference) += 0.3;
                                         break;
                                     case 11:
-                                        //interferences[msgInterference] += 0.2;
-                                        //interferences[msgSignal]       += 0.2;
                                         std::get<1>(tupleSignal)       += 0.2;
                                         std::get<1>(tupleInterference) += 0.2;
                                         break;
                                     case 10:
-                                        //interferences[msgInterference] += 0.05;
-                                        //interferences[msgSignal]       += 0.05;
                                         std::get<1>(tupleSignal)       += 0.05;
                                         std::get<1>(tupleInterference) += 0.05;
                                         break;
@@ -5084,8 +5492,6 @@ void LoRaGateway::handleInterference(
                             else if (bwInterference == BANDWIDTH_250) {
                                 EV << "INTERFERENCE\n";
 
-                                //interferences[msgInterference] += 0.01;
-                                //interferences[msgSignal]       += 0.01;
                                 std::get<1>(tupleSignal)       += 0.01;
                                 std::get<1>(tupleInterference) += 0.01;
 
@@ -5102,8 +5508,6 @@ void LoRaGateway::handleInterference(
                             if (bwInterference == BANDWIDTH_125) {
                                 EV << "INTERFERENCE\n";
 
-                                //interferences[msgInterference] += 0.05;
-                                //interferences[msgSignal]       += 0.05;
                                 std::get<1>(tupleSignal)       += 0.05;
                                 std::get<1>(tupleInterference) += 0.05;
 
@@ -5132,9 +5536,54 @@ void LoRaGateway::handleInterference(
         emit(signalInterferencePossibleCount, ++interferencesPossibleCount);
     }
 
-
     EV << "===========================================\n";
 }
+
+void LoRaGateway::handleInterferenceUplink(
+        cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages) {
+    if (!msgInterference || interferedMessages.size() == 0)
+        return;
+
+    // Check if the end device is in the radio range (should be)
+    //if (neighborDevicesInterferences.find(msgInterference->getSenderModuleId()) == neighborDevicesInterferences.end())
+    if (neighborDevicesInterferences.find(msgInterference->getSenderModule()) == neighborDevicesInterferences.end())
+        return;
+
+    // Get possible interferer message RSSI
+    LoRaEndDevice* deviceInterference = dynamic_cast<LoRaEndDevice*>(msgInterference->getSenderModule());
+    if (!deviceInterference)
+        return;
+
+    int rssiInterference = calculateRSSI(this, deviceInterference->getPosX(), deviceInterference->getPosY(), posX, posY, EV);
+    EV << "Possible interference RSSI: " << rssiInterference << "\n";
+
+    handleInterference(msgInterference, interferedMessages, rssiInterference, true);
+}
+
+void LoRaGateway::handleInterferenceDownlink(
+        cPacket* msgInterference, cModule* interferer, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages) {
+    if (!msgInterference || !interferer || interferedMessages.size() == 0)
+        return;
+
+    // Check if the gateway is in the radio range (should be)
+    //cModule* sender = msgInterference->getSenderModule();
+    //if (sender != this && neighborGatewaysInterferences.find(sender) == neighborGatewaysInterferences.end())
+    // Assume self-interference cancellation
+
+    if (neighborGatewaysInterferences.find(interferer) == neighborGatewaysInterferences.end())
+        return;
+
+    // Get possible interferer message RSSI
+    LoRaGateway* gatewayInterference = dynamic_cast<LoRaGateway*>(interferer);
+    if (!gatewayInterference)
+        return;
+
+    int rssiInterference = calculateRSSI(this, gatewayInterference->getPosX(), gatewayInterference->getPosY(), posX, posY, EV);
+    EV << "Possible interference RSSI: " << rssiInterference << "\n";
+
+    handleInterference(msgInterference, interferedMessages, rssiInterference, false);
+}
+
 
 // Receive notification from end device that completed the protocol run to stop the simulation when all have finished
 void LoRaGateway::deviceFinish() {

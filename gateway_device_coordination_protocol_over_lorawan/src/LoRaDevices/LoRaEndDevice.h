@@ -131,6 +131,8 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     unsigned long messagesOut;
     unsigned long messagesLost;
     unsigned long messagesRetransmitted;
+    unsigned long interferencesCount;
+    unsigned long interferencesPossibleCount;
 
     // Position of the device for creating communication channels only with gateways in the radio range
     unsigned posX;
@@ -146,12 +148,24 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     // Map indexed by the bandwidth and values the channel frequencies
     std::map<float, std::vector<float>> channelFrequencies;
 
+
     // Variables for handling interferences
     std::set<LoRaEndDevice*> neighborDevicesInterferences;
     std::set<cModule*> neighborGatewaysInterferences;
 
     // List composed of messages sent by neighbor end devices and corresponding expiration times (preamble and time on air)
     std::list<std::tuple<cPacket*, simtime_t, simtime_t>> neighborMessages;
+
+    // Map for handling interferences indexed by the message and value a tuple composed of:
+    // - the SINR resulting after applying external noise
+    // - the probability that the message is dropped
+    //std::map<cMessage*, std::tuple<int, float>> interferences;
+    // Use the shared ID among a message and its copies instead of the pointer of the message
+    // because the sensor sends in broadcast multiple duplicates
+    //std::map<long, std::tuple<int, float>> interferences;
+    // Replace SINR with sum of interferences and noise in mW
+    std::map<long, std::tuple<double, float>> interferences;
+
 
     // Variables for handling duty cycle
     double dutyCycle;                 // %
@@ -180,9 +194,11 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     void sendMessage(bool sendDuplicate);
     void resendMessage(uint8_t* keyMIC);
     void notifyNeighborDevices(cPacket* msg, simtime_t arrivalPreamble, simtime_t arrivalFrame);
-    //void notifyNeighborGateways(cPacket* msgInterference, std::list<std::tuple<cPacket*, bool>>& msgsInterfered);
-    void notifyNeighborGateways(cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& msgsInterfered);
+    //void notifyNeighborGateways(cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& msgsInterfered);
+    void notifyNeighborGateways(
+            cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages);
     void verifyTransmissionInterference(cPacket* msg);
+    bool surviveMessageToLoRaInterference(cMessage* msg);
     // ============ CLASS FUNCTIONS ==============
 
     // ============ CLASS SIGNALS ==============
@@ -195,6 +211,11 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     simsignal_t signalReceivedCount;
     simsignal_t signalLostCount;
     simsignal_t signalRetransmittedCount;
+
+    simsignal_t signalInterference;
+    simsignal_t signalInterferencePossible;
+    simsignal_t signalInterferenceCount;
+    simsignal_t signalInterferencePossibleCount;
     // ============ CLASS SIGNALS ==============
 
   protected:
@@ -215,9 +236,14 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     //simsignal_t getSignalInterference();
 
     void addNeighborDevice(LoRaEndDevice* neighbor);
-    void addNeighborGateway(cModule* neighbor);
-    //void receiveNotification(cPacket* msg);
+    void addNeighborGateway(LoRaGateway* neighbor);
     void receiveNotification(cPacket* msg, simtime_t arrivalPreamble, simtime_t arrivalFrame);
+
+    //void handleInterference(cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages);
+    void handleInterferenceDownlink(
+            cPacket* msgInterference, cModule* interferer,
+            std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages);
+
 };
 
 

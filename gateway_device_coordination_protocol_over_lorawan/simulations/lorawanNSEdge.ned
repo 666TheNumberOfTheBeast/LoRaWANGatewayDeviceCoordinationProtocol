@@ -23,10 +23,11 @@ import inet.node.ethernet.Eth100M;
 
 import src.LoRaDevices.*;
 
-network LoRaNetworkServerEdgeTest
+network LoRaNetworkServerEdgeStochasticScenarioTest
 {
     parameters:
         bool realDeployment = false;
+        bool fullCoverage = default(false);
         int region = default(1);
         int nEndDevices = default(3);
         int nGateways = default(3);

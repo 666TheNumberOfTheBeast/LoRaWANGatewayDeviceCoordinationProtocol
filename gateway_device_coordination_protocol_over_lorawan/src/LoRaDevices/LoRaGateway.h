@@ -5,6 +5,7 @@
 #include <list>
 //#include <utility> // For std::pair
 #include <tuple>
+#include <random>
 
 #include "Utils.h"
 
@@ -143,9 +144,21 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
     unsigned posY;
 
 
+    // Variables for physical layer
+    // Map indexed by the bandwidth and values the channel frequencies
+    std::map<float, std::vector<float>> channelFrequencies;
+
 
     // Variables for handling interferences
-    std::set<int> neighborDevicesInterferences;
+    //std::set<int> neighborDevicesInterferences;
+    std::set<cModule*> neighborDevicesInterferences;
+    std::set<cModule*> neighborGatewaysInterferences;
+
+    // List of tuples composed of:
+    // - messages sent by neighbor gateways
+    // - sender module
+    // - corresponding sending and expiration times (preamble and time on air)
+    std::list<std::tuple<cPacket*, cModule*, simtime_t, simtime_t, simtime_t>> neighborMessages;
 
     // Map for handling interferences indexed by the message and value a tuple composed of:
     // - the SINR resulting after applying external noise
@@ -186,6 +199,7 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
         uint8_t* src, uint8_t* dest, uint8_t* decryptKey, std::array<uint8_t, IPv4_ADDRESS_SIZE>& srcAddress);
     uint8_t processData(uint8_t data);
     bool isStateChanged(unsigned timestamp);
+
     void sendMessageHelloGateway(
             //uint8_t* endDeviceAddress, uint16_t counter,
             std::array<uint8_t, IPv4_ADDRESS_SIZE>& endDeviceAddress, uint16_t counter,
@@ -196,7 +210,7 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
             uint8_t spreadingFactor, uint8_t transmissionPower, float bandwidth, float channelFrequency);
     void sendMessageShareCounter(uint8_t* endDeviceAddress, uint16_t counter);
     void sendMessageConnection(uint8_t* endDeviceAddress, uint8_t requestId, uint16_t counter, uint8_t res);
-    void sendMessageDataProfile(uint8_t* endDeviceAddress, const char* dataProfile, int dataProfileSize);
+    //void sendMessageDataProfile(uint8_t* endDeviceAddress, const char* dataProfile, int dataProfileSize);
     void sendMessageProcessedData(
             uint8_t* endDeviceAddress, uint8_t processedData, uint8_t* timestamp,
             const char* dataProfile, int dataProfileSize);
@@ -204,11 +218,29 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
             const char* messageName, const char* timeoutName,
             std::array<uint8_t, IPv4_ADDRESS_SIZE>& destAddress, unsigned port,
             uint8_t* payload, unsigned payloadSize, cPacket* encapsulatedPacket);
-    void sendMessageIp(cPacket* msg, std::array<uint8_t, IPv4_ADDRESS_SIZE>& destAddress, simtime_t delay=0);
+    void sendMessageIp(
+            cPacket* msg, std::array<uint8_t, IPv4_ADDRESS_SIZE>& destAddress, bool sendDuplicate, simtime_t delay=0);
     void forwardMessageIp(
             cMessage* msg, const char* name,
             std::array<uint8_t, IPv4_ADDRESS_SIZE>& destAddress, unsigned port, bool reencrypt, simtime_t delay=0);
     void forwardMessageToNeighbors(cMessage* msg, uint8_t* decryptKey);
+    void sendMessageLoRa(
+            cPacket* msg, bool isTowardsDevices, bool delayTransmission, double delay=0,
+            bool retransmit=false, cMessage* eventTimeout=nullptr);
+    void notifyNeighborGateways(
+            cPacket* msg, cModule* sender, simtime_t sendingTime, simtime_t arrivalPreamble, simtime_t arrivalFrame);
+    //void notifyNeighborDevices(cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages);
+    void notifyNeighborDevices(cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages);
+    //void notifyNeighborGateways(cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages);
+    void notifyNeighborGateways(cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages);
+    void verifyTransmissionInterference(cPacket* msg, simtime_t sendingTime, bool isTowardsDevices);
+    bool surviveMessageToLoRaInterference(cMessage* msg);
+    //float calculateProbabilityBER(int maxBer, int snrThreshold, int snr);
+    //std::tuple<int, float> applyExternalNoise(cMessage* msg, int rssi, uint8_t sf, float bw);
+    //std::tuple<double, float> applyExternalNoise(cMessage* msg, int rssi, uint8_t sf, float bw);
+    //std::tuple<int, float> applyExternalNoise(cMessage* msg, int rssi);
+    //std::tuple<double, float> applyExternalNoise(cMessage* msg, int rssi);
+
     uint8_t getCpuLoad();
     uint8_t getGpuLoad();
     uint8_t getRamLoad();
@@ -217,12 +249,6 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
     uint8_t getNetworkOut();
     bool checkResources();
     void updateResources();
-    bool checkLoRaInterference(cMessage* msg);
-    float calculateProbabilityBER(int maxBer, int snrThreshold, int snr);
-    //std::tuple<int, float> applyExternalNoise(cMessage* msg, int rssi, uint8_t sf, float bw);
-    std::tuple<double, float> applyExternalNoise(cMessage* msg, int rssi, uint8_t sf, float bw);
-    //std::tuple<int, float> applyExternalNoise(cMessage* msg, int rssi);
-    std::tuple<double, float> applyExternalNoise(cMessage* msg, int rssi);
     // ============ CLASS FUNCTIONS ==============
 
     // ============ CLASS SIGNALS ==============
@@ -283,11 +309,23 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
     const char* getLoRaGateBasename();
     //simsignal_t getSignalInterference();
 
-    void addNeighborDevice(int neighborId);
+    //void addNeighborDevice(int neighborId);
+    void addNeighborDevice(cModule* neighbor);
+    void addNeighborGateway(LoRaGateway* neighbor);
+    void receiveNotification(
+            cPacket* msg, cModule* sender, simtime_t sendingTime, simtime_t arrivalPreamble, simtime_t arrivalFrame);
 
     //void handleInterference(cModule* source, cMessage* msg);
     //void handleInterference(cPacket* msgInterference, std::list<std::tuple<cPacket*, bool>>& interferedMessages);
-    void handleInterference(cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages);
+    //void handleInterference(cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages);
+    void handleInterference(
+            cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages,
+            int rssiInterference, bool isUplink);
+    void handleInterferenceUplink(
+            cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages);
+    void handleInterferenceDownlink(
+            cPacket* msgInterference, cModule* interferer,
+            std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages);
 
     void deviceFinish();
 };

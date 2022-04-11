@@ -1,5 +1,5 @@
-#include "LoRaEndDevice.h"
 #include "LoRaGateway.h"
+#include "LoRaEndDevice.h"
 
 
 //namespace masterthesis {
@@ -143,24 +143,6 @@ void LoRaEndDevice::initialize() {
     char id_[intLen] = {};
     snprintf(id_, intLen, "%d", id);
 
-    //EV << "i_: " << i_ << "\n";
-    //EV << "strlen(i_): " << strlen(i_) << "\n";
-
-    //*****************
-    /*int p = 1;
-    char prova[intLen] = {};
-
-    for (int k=0; k<30; k++) {
-        snprintf(prova, intLen, "%d", p);
-
-        EV << "prova: " << prova << "\n";
-        EV << "strlen(prova): " << strlen(prova) << "\n";
-        EV << "sizeof(prova): " << sizeof(prova) << "\n";
-
-        p *= 10;
-    }*/
-    //*****************
-
     strncpy(locationString, "Sapienza/Building/", LOCATION_STRING_LENGTH);
     strncat(locationString, id_, sizeof(locationString)-1);
     EV << "location string: " << locationString << "\n";
@@ -180,6 +162,8 @@ void LoRaEndDevice::initialize() {
     messagesOut           = 0;
     messagesLost          = 0;
     messagesRetransmitted = 0;
+    interferencesCount         = 0;
+    interferencesPossibleCount = 0;
 
 
     cModule* parent = getParentModule();
@@ -339,37 +323,47 @@ void LoRaEndDevice::initialize() {
         int bgX = parent->par("bgX").intValue();
         int bgY = parent->par("bgY").intValue();
 
-        //=====================
-        // Set random position
-        /*posX = (rand() + (int) uniform(0, bgX)) % bgX;
-        posY = (rand() + (int) uniform(0, bgY)) % bgY;
-        //posX = (rand() % bgX + (int) uniform(500, bgX)) % bgX;
-        //posY = (rand() % bgY + (int) uniform(500, bgY)) % bgY;
+        bool fullCoverage = parent->par("fullCoverage").boolValue();
 
-        if (posY <= 300 && posX < bgX*0.7)
-            posY += 1000;*/
-        //=====================
+        // Gateway index
+        int i = 0;
 
-        //=====================
-        // Get a random gateway
-        //const int nGateways = getParentModule()->par("nGateways").intValue();
-        int i = (rand() + (int) uniform(0, 100)) % nGateways;
-        LoRaGateway* gateway = dynamic_cast<LoRaGateway*>(parent->getSubmodule("gateways", i));
-
+        // Set min and max distance from a gateway
         // sqrt(dx^2 + dy^2) < LORA_RANGE => sqrt(2dx^2) < LORA_RANGE => sqrt(2)dx < LORA_RANGE
         // dx < LORA_RANGE / sqrt(2)
-        const unsigned minDx = 300;
-        const unsigned maxDx = LORA_RANGE / sqrt(2);
-        const unsigned diffDx = maxDx- minDx;
+        unsigned minDx = 300;
+        unsigned maxDx = LORA_RANGE / sqrt(2);
+
+        // Check if all end devices should be located in the radio range of all gateways
+        if (fullCoverage) {
+            // Get the first gateway
+            maxDx -= 300;
+        }
+        else {
+            // Get a random gateway
+            i = (rand() + (int) uniform(0, 100)) % nGateways;
+        }
+
+        // Get the gateway
+        LoRaGateway* gateway = dynamic_cast<LoRaGateway*>(parent->getSubmodule("gateways", i));
+
+        // Get a random distance in [min, max]
+        const unsigned diffDx = maxDx - minDx;
+        double d = minDx + (rand() + (int) uniform(0, diffDx)) % diffDx;
 
         // Try to set device position in the gateway range
-        //posX = rand()%2 ? (gateway->getPosX() + (int) uniform(minDx, maxDx)) % bgX : (gateway->getPosX() - (int) uniform(minDx, maxDx)) % bgX;
-        //posY = rand()%2 ? (gateway->getPosY() + (int) uniform(minDx, maxDx)) % bgY : (gateway->getPosY() - (int) uniform(minDx, maxDx)) % bgY;
-        posX = rand()%2 ? (gateway->getPosX() + minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgX :
-                          (gateway->getPosX() - minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgX;
-        posY = rand()%2 ? (gateway->getPosY() + minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgY :
-                          (gateway->getPosY() - minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgY;
+        //posX = rand()%2 ? (gateway->getPosX() + minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgX :
+        //                  (gateway->getPosX() - minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgX;
+        //posY = rand()%2 ? (gateway->getPosY() + minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgY :
+        //                  (gateway->getPosY() - minDx + (rand() + (int) uniform(0, diffDx)) % diffDx) % bgY;
 
+        // Locate in the gateway range with positive coordinates
+        do {
+            // Get a random angle in radians
+            double angle = ((rand() + (int) uniform(0, 360)) % 360) * 3.14 / 180;
+            posX = gateway->getPosX() + d * cos(angle);
+            posY = gateway->getPosY() + d * sin(angle);
+        } while (posX < 0 || posY < 0 || posX > bgX || posY > bgY);
 
         // Create connections with gateways based on device location
         int gateIndex = 0;
@@ -380,7 +374,6 @@ void LoRaEndDevice::initialize() {
             LoRaGateway* gateway = dynamic_cast<LoRaGateway*>(parent->getSubmodule("gateways", i));
             double distance = 0;
 
-            // Work by addition
             // Check if the device is in the range of the gateway
             if (isInLoRaRange(posX, posY, gateway->getPosX(), gateway->getPosY(), &distance, LORA_RANGE)) {
                 // Get gateway vector gate size (IN & OUT sizes are equal)
@@ -454,36 +447,12 @@ void LoRaEndDevice::initialize() {
                 //============================
 
                 //============================
+                // Share references with neighbor gateways for handling interferences
                 addNeighborGateway(gateway);
-                gateway->addNeighborDevice(getId());
+                //gateway->addNeighborDevice(getId());
+                gateway->addNeighborDevice(this);
                 //============================
             }
-
-            // Work by deletion
-            /*if (!isInGatewayRange(gateway->getPosX(), gateway->getPosY())) {
-                // Get device output gate & gateway input gate
-                cGate* deviceGate  = gate(LORA_GATE_OUT, i);
-                //cGate* gatewayGate = gateway->gate(gateway->getLoRaGateIn(), i);
-
-
-                EV << "Device gate OUT vector size: " << deviceGate->getVectorSize() << "\n";
-                //EV << "Gateway gate IN vector size: " << gatewayGate->getVectorSize() << "\n";
-                EV << "Gateway gate IN vector size: " << gateway->gateSize(gateway->getLoRaGateIn()) << "\n";
-
-                // Disconnect OUT->IN connection
-                deviceGate->disconnect();
-
-                // Get device input gate & gateway output gate
-                deviceGate  = gate(LORA_GATE_IN, i);
-                //gatewayGate = gateway->gate(gateway->getLoRaGateOut(), i);
-
-                EV << "Device gate IN vector size: " << deviceGate->getVectorSize() << "\n";
-                //EV << "Gateway gate OUT vector size: " << gatewayGate->getVectorSize() << "\n";
-                EV << "Gateway gate OUT vector size: " << gateway->gateSize(gateway->getLoRaGateOut()) << "\n";
-
-                // Disconnect IN<-OUT connection
-                //gatewayGate->disconnect();
-            }*/
         }
 
         // Verify
@@ -528,7 +497,7 @@ void LoRaEndDevice::initialize() {
     dutyCycleStartInterval = 0;
     eventTimeoutDutyCycle = new cMessage("timeoutDutyCycle");
 
-    switch(region) {
+    /*switch(region) {
         case REGION_EU868:
             // Append the bandwidths
             bandwidths_.push_back(BANDWIDTH_125);
@@ -638,7 +607,9 @@ void LoRaEndDevice::initialize() {
                 tp++;
             }
         }
-    }
+    }*/
+
+    getPhysicalParameters(region, &dutyCycle, bandwidths, channelFrequencies);
 
     // Print the map indexed by spreading factors and values the list of corresponding tuples of (bandwidth, tx power)
     for (const auto& k : bandwidths) {
@@ -740,6 +711,10 @@ void LoRaEndDevice::initialize() {
     signalReceivedCount      = registerSignal("receivedCount");
     signalLostCount          = registerSignal("lostCount");
     signalRetransmittedCount = registerSignal("retransmittedCount");
+    signalInterference              = registerSignal("interference");
+    signalInterferencePossible      = registerSignal("interferencePossible");
+    signalInterferenceCount         = registerSignal("interferenceCount");
+    signalInterferencePossibleCount = registerSignal("interferencePossibleCount");
 
 
     // The 'ev' object works like 'cout' in C++
@@ -1479,8 +1454,8 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
             sendMessage(false);
         }
         // Disabled for evaluating the number of messages of the Gateway-Device coordination protocol.
-        // Enable for evaluating the correcteness of the entire protocol
-        else {
+        // Enable for evaluating the correctness of the entire protocol
+        /*else {
             // Pairing algorithm is ended
             EV << "Sending data...\n";
 
@@ -1510,7 +1485,7 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
                 spreadingFactor, transmissionPower, bandwidth, channelFrequency);
             sendMessage(false);
         }//*/
-        /*else{
+        else{
             // Terminate and notify gateways to stop the simulation when all end devices have finished the protocol run
             cModule* parent = getParentModule();
             const int nGateways = parent->par("nGateways").intValue();
@@ -1526,7 +1501,7 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
             eventTimeoutDutyCycle = nullptr;
 
             return;
-        }*/
+        }//*/
 
         // Send signal for statistic collection
         emit(signalSent, 1u);
@@ -1577,7 +1552,9 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
             return;
         }
 
-        // TODO: replace this with background noise
+        //======================
+        // Replaced with background noise and interferences
+
         // Lose the message with a certain probability
         //if (uniform(0, 1) < 2) {
         //if (uniform(0, 1) < MSG_LOSS_PROBABILITY) {
@@ -1599,6 +1576,10 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
 
             return;
         }*/
+        //======================
+
+        if (!surviveMessageToLoRaInterference(msgIn))
+            return;
 
         // The end device is in a receive window
         uint8_t port;
@@ -1839,9 +1820,9 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
 
             // Check if the pairing request has been accepted by the selected gateway
             if (payloadIn[1] == ACK)
-                EV << "Received ACK for PAIRING_ACCEPT message\n";
+                EV << "Received ACK for PAIRING_REQUEST message\n";
             else if (payloadIn[1] == NACK) {
-                EV << "Received NACK for PAIRING_ACCEPT message\n";
+                EV << "Received NACK for PAIRING_REQUEST message\n";
 
                 // Search another gateway
                 stage = STAGE_FORWARD;
@@ -1849,7 +1830,7 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
                 //isPairingVerified = false;
             }
             else {
-                EV << "Received STATS_UPDATE for PAIRING_ACCEPT message\n";
+                EV << "Received STATS_UPDATE for PAIRING_REQUEST message\n";
                 // The decision was based on an old state of the gateway.
                 // Get reception timestamp (almost equal to sending timestamp as radio waves go very fast)
                 //simtime_t timestamp = simTime();
@@ -2333,7 +2314,8 @@ void LoRaEndDevice::resendMessage(uint8_t* keyMIC) {
     dlMsg->encapsulate(appMsg);
 
     // Recalculate MIC
-    calculateMIC(dlMsg, appMsg, keyMIC);
+    //calculateMIC(dlMsg, appMsg, keyMIC);
+    calculateMIC(dlMsg, keyMIC);
 
     // Do not need to update stored message as the physical pointer is still valid
     //msgOut = phyMsg;
@@ -2358,8 +2340,8 @@ void LoRaEndDevice::notifyNeighborDevices(cPacket* msg, simtime_t arrivalPreambl
 
 // Notify neighbors for handling interferences
 void LoRaEndDevice::notifyNeighborGateways(
-        //cPacket* msgInterference, std::list<std::tuple<cPacket*, bool>>& interferedMessages) {
-        cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages) {
+        //cPacket* msgInterference, std::list<std::tuple<cPacket*, int, bool>>& interferedMessages) {
+        cPacket* msgInterference, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages) {
     //=============================
     // Create a wrapper message including the possible interfering message and the interfered ones
     /*cMessage* msg = new cMessage("Interference");
@@ -2385,10 +2367,8 @@ void LoRaEndDevice::notifyNeighborGateways(
     //=============================
     // Without signals there is no need for the wrapper message
 
-    for (auto neighborGateway : neighborGatewaysInterferences) {
-        LoRaGateway* neighborGateway_ = dynamic_cast<LoRaGateway*>(neighborGateway);
-        neighborGateway_->handleInterference(msgInterference, interferedMessages);
-    }
+    for (auto neighborGateway : neighborGatewaysInterferences)
+        dynamic_cast<LoRaGateway*>(neighborGateway)->handleInterferenceUplink(msgInterference, interferedMessages);
     //=============================
 }
 
@@ -2419,7 +2399,8 @@ void LoRaEndDevice::verifyTransmissionInterference(cPacket* msg) {
     // List of possible interfered messages composed of tuples
     // (interfered message, is interfering during preamble?)
     // to send just a signal instead of one per possible interference
-    std::list<std::tuple<cPacket*, int, bool>> interferedMessages;
+    //std::list<std::tuple<cPacket*, int, bool>> interferedMessages;
+    std::list<std::tuple<cPacket*, cModule*, bool>> interferedMessages;
 
     EV << "verifyTransmissionInterference - Msg sending time: " << msg->getSendingTime() << "\n";
 
@@ -2429,16 +2410,19 @@ void LoRaEndDevice::verifyTransmissionInterference(cPacket* msg) {
         EV << "verifyTransmissionInterference - Neighbor msg frame expiration: " << std::get<2>(tuple) << "\n";
 
         cPacket* neighborMsg = std::get<0>(tuple);
-        int neighborId       = neighborMsg->getSenderModuleId();
+        //int neighborId       = neighborMsg->getSenderModuleId();
+        cModule* neighborId  = neighborMsg->getSenderModule();
         EV << "verifyTransmissionInterference - NeighborId: " << neighborId << "\n";
 
         // Verify if a possible interference occurred during the preamble transmission
         if(msg->getSendingTime() <= std::get<1>(tuple))
-            interferedMessages.push_back(std::tuple<cPacket*, int, bool> {neighborMsg, neighborId, true});
+            //interferedMessages.push_back(std::tuple<cPacket*, int, bool> {neighborMsg, neighborId, true});
+            interferedMessages.push_back(std::tuple<cPacket*, cModule*, bool> {neighborMsg, neighborId, true});
 
         // Verify if a possible interference occurred during the header+payload transmission
         else if (msg->getSendingTime() <= std::get<2>(tuple))
-            interferedMessages.push_back(std::tuple<cPacket*, int, bool> {neighborMsg, neighborId, false});
+            //interferedMessages.push_back(std::tuple<cPacket*, int, bool> {neighborMsg, neighborId, false});
+            interferedMessages.push_back(std::tuple<cPacket*, cModule*, bool> {neighborMsg, neighborId, false});
 
         else
             // The tuple is expired, remove the head of the list since tuples are appended at the end of the list
@@ -2457,6 +2441,68 @@ void LoRaEndDevice::verifyTransmissionInterference(cPacket* msg) {
         // Notify neighbor gateways of the possible interferences
         notifyNeighborGateways(msg, interferedMessages);
     //=============================================
+}
+
+// Return true if the message survives to interference, false otherwise
+bool LoRaEndDevice::surviveMessageToLoRaInterference(cMessage* msg) {
+    if (!msg)
+        return false;
+
+    //std::tuple<int, float> tuple;
+    std::tuple<double, float> tuple;
+
+    // Check if the message is subjected to interference
+    //auto it = interferences.find(msg);
+    long msgId = msg->getTreeId();
+    auto it = interferences.find(msgId);
+    if (it == interferences.end()) {
+        // No interference has been applied to the message because no other nearby end device sent a message during
+        // the time on air. However, the external noise must always be applied
+
+        // Get message RSSI
+        LoRaGateway* gateway = dynamic_cast<LoRaGateway*>(msg->getSenderModule());
+        if (!gateway)
+            return false;
+
+        int rssi = calculateRSSI(this, gateway->getPosX(), gateway->getPosY(), posX, posY, EV);
+
+        EV << "Message RSSI: " << rssi << "\n";
+
+        // Apply external noise and insert the message in interferences
+        tuple = applyExternalNoise(msg, rssi, interferences, EV);
+        if (std::get<1>(tuple) < 0)
+            return false;
+    }
+    else
+        tuple = it->second;
+
+    // Remove the message from interferences as it is arrived and is no longer over the air
+    // otherwise the interference is overestimated because probabilities wrongly sum between
+    // retransmitted messages
+    interferences.erase(msgId);
+
+    EV << "Drop probability: " << std::get<1>(tuple) << "\n";
+
+    if (uniform(0, 1) <= std::get<1>(tuple)) {
+        EV << "Message lost!\n";
+
+        // Make animation more informative
+        bubble("Message lost!");
+
+        // Delete the message as in OMNeT++ once sent out,
+        // a message no longer belongs to the sender module and
+        // it is taken over by the simulation kernel, and will eventually be delivered to the destination module.
+        // Once the message arrives in the destination module, that module will have full authority over it
+        delete msg;
+
+        // Send signal for statistic collection
+        emit(signalLost, 1u);
+        emit(signalLostCount, ++messagesLost);
+
+        return false;
+    }
+
+    return true;
 }
 
 
@@ -2483,7 +2529,7 @@ void LoRaEndDevice::addNeighborDevice(LoRaEndDevice* neighbor) {
     EV << "=====================================\n";
 }
 
-void LoRaEndDevice::addNeighborGateway(cModule* neighbor) {
+void LoRaEndDevice::addNeighborGateway(LoRaGateway* neighbor) {
     if (!neighbor)
         return;
 
@@ -2507,7 +2553,333 @@ void LoRaEndDevice::receiveNotification(cPacket* msg, simtime_t arrivalPreamble,
     // Handle interferences from the transmitter of the new message and non from the interfered
     // as A interfering with B implies B interfered by A, so, it is sufficient to handle it once
     //EV << "=====================================\n";
+}
 
+
+void LoRaEndDevice::handleInterferenceDownlink(
+        cPacket* msgInterference, cModule* interferer, std::list<std::tuple<cPacket*, cModule*, bool>>& interferedMessages) {
+    if (!msgInterference || !interferer || interferedMessages.size() == 0)
+        return;
+
+    // Check if the gateway is in the radio range (should be)
+    //if (neighborGatewaysInterferences.find(msgInterference->getSenderModule()) == neighborGatewaysInterferences.end())
+    if (neighborGatewaysInterferences.find(interferer) == neighborGatewaysInterferences.end())
+        return;
+
+    EV << "============= handleInterference =============\n";
+    EV << "Device that manages the interference: " << this << "\n";
+
+    // Get possible interferer message parameters (sent by source module)
+    LoRaPhysicalFrame* msgInterference_ = dynamic_cast<LoRaPhysicalFrame*>(msgInterference);
+    if (!msgInterference_)
+        return;
+
+    uint8_t sfInterference = msgInterference_->getSpreadingFactor();
+    float bwInterference   = msgInterference_->getBandwidth();
+    float cfInterference   = msgInterference_->getChannelFrequency();
+
+    EV << "Possible interference spreading factor: " << (int) sfInterference << "\n";
+    EV << "Possible interference bandwidth: " << bwInterference << "\n";
+    EV << "Possible interference ch frequency: " << cfInterference << "\n";
+
+    // Apply external noise to the possible interferer message.
+    // This cannot be applied twice or more because only this time it is the interferer
+
+    // Get possible interferer message RSSI
+    //LoRaGateway* gatewayInterference = dynamic_cast<LoRaGateway*>(msgInterference_->getSenderModule());
+    LoRaGateway* gatewayInterference = dynamic_cast<LoRaGateway*>(interferer);
+    if (!gatewayInterference)
+        return;
+
+    int rssiInterference = calculateRSSI(this, gatewayInterference->getPosX(), gatewayInterference->getPosY(), posX, posY, EV);
+    EV << "Possible interference RSSI: " << rssiInterference << "\n";
+
+    auto tupleInterference = applyExternalNoise(msgInterference_, rssiInterference, sfInterference, bwInterference, interferences, EV);
+    if (std::get<1>(tupleInterference) < 0)
+        return;
+
+    // Get possible interference shared ID between original message and duplicates
+    long interferenceId = msgInterference->getTreeId();
+
+    // Compare possible interference message with possible interfered messages
+    // (collected via notifications by the end device source before it sent its message and
+    // other time on airs are not ended)
+    for (auto tuple : interferedMessages) {
+        cModule* interfered = std::get<1>(tuple);
+
+        // Check if the gateway is in the radio range
+        if (neighborGatewaysInterferences.find(interfered) == neighborGatewaysInterferences.end())
+            continue;
+
+        // Get possible interfered message parameters
+        LoRaPhysicalFrame* msgSignal = dynamic_cast<LoRaPhysicalFrame*>(std::get<0>(tuple));
+        if (!msgSignal)
+            return;
+
+        uint8_t sfSignal = msgSignal->getSpreadingFactor();
+        float bwSignal   = msgSignal->getBandwidth();
+        float cfSignal   = msgSignal->getChannelFrequency();
+        bool isInterferingPreamble = std::get<2>(tuple);
+
+        EV << "Signal spreading factor: " << (int) sfSignal << "\n";
+        EV << "Signal bandwidth: " << bwSignal << "\n";
+        EV << "Signal ch frequency: " << cfSignal << "\n";
+
+
+        // Get possible interfered message RSSI
+        //LoRaGateway* gatewaySignal = dynamic_cast<LoRaGateway*>(msgSignal->getSenderModule());
+        LoRaGateway* gatewaySignal = dynamic_cast<LoRaGateway*>(interfered);
+        if (!gatewaySignal)
+            return;
+
+        int rssiSignal = calculateRSSI(this, gatewaySignal->getPosX(), gatewaySignal->getPosY(), posX, posY, EV);
+        EV << "Signal RSSI: " << rssiSignal << "\n";
+
+        std::tuple<double, float> tupleSignal;
+
+        // Check if noise has already been applied to this signal
+        //auto it = interferences.find(msgSignal);
+        long signalId = msgSignal->getTreeId();
+        auto it = interferences.find(signalId);
+
+        if (it == interferences.end()) {
+            tupleSignal = applyExternalNoise(msgSignal, rssiSignal, sfSignal, bwSignal, interferences, EV);
+            if (std::get<1>(tupleSignal) < 0)
+                continue;
+        }
+        else {
+            tupleSignal = it->second;
+            EV << "NoiseAndInterference power: " << std::get<0>(tupleSignal) << " mW\n";
+        }
+
+
+        // Check if the two messages are transmitted using the same bandwidth
+        if (bwInterference == bwSignal) {
+            EV << "The signal and the possible interference are transmitted in the same bandwidth!\n";
+
+            // Check if the two messages are transmitted using the same channel
+            if (cfInterference == cfSignal) {
+                EV << "The signal and the possible interference are transmitted in the same ch frequency!\n";
+
+                // Signal Interference Ratio calculated in dB
+                //const int sir = std::get<0>(tupleSignal) - std::get<0>(tupleInterference);
+                // Sum the interference in mW to other interferences and noise in mW
+                double noiseAndInterferencePower = std::get<0>(tupleSignal) + pow(10, rssiInterference/10);                EV << "NoiseAndInterferences power: " << noiseAndInterferencePower << " mW\n";
+                const int sir = rssiSignal - 10*log10(noiseAndInterferencePower);
+                EV << "SIR: " << sir << "\n";
+
+                // Update the SNIR of the interfered message to sum up the effect of multiple interferer messages
+                //std::get<0>(tupleSignal) = sir;
+
+                // Update the sum of noise and interferences in mW
+                std::get<0>(tupleSignal) = noiseAndInterferencePower;
+
+                int sirThreshold = INTERFERENCE_SIR_THRESHOLD;
+
+                // Check if the two messages are transmitted using the same spreading factor
+                if (sfInterference == sfSignal) {
+                    // Strong Interference
+                    EV << "The signal and the possible interference are transmitted with the same spreading factor! STRONG INTERFERENCE\n";
+
+                    if (isInterferingPreamble) {
+                        if (sir >= sirThreshold) {
+                            // Interference is dropped,
+                            // Signal is dropped with a probability of 8-15%
+                            std::get<1>(tupleSignal)       += 0.1;
+                            std::get<1>(tupleInterference) = 1;
+                        }
+                        else {
+                            // Signal and Interference are dropped
+                            std::get<1>(tupleSignal)       = 1;
+                            std::get<1>(tupleInterference) = 1;
+                        }
+                    }
+                    else {
+                        if (sir >= sirThreshold) {
+                            // Signal is dropped with a probability of 0-5%,
+                            // Interference is dropped
+                            std::get<1>(tupleSignal)      += 0.03;
+                            std::get<1>(tupleInterference) = 1;
+                        }
+                        else {
+                            // Signal and Interference are dropped
+                            std::get<1>(tupleSignal)       = 1;
+                            std::get<1>(tupleInterference) = 1;
+                        }
+                    }
+
+                    // Send signal for statistic collection
+                    emit(signalInterference, 1u);
+                    emit(signalInterferenceCount, ++interferencesCount);
+                }
+
+                // Else the two messages are transmitted using different spreading factors.
+                // Check if the second message is transmitted during the preamble of the first
+                else if (isInterferingPreamble) {
+                    EV << "The signal and the possible interference are transmitted with different spreading factors! WEAK INTERFERENCE\n";
+                    // Noise, imperfect orthogonality, weak interference
+                    int maxBer   = 0;
+
+                    switch (sfSignal) {
+                        case 7:
+                            sirThreshold = -9; // (-8-9-9-9-9)/5
+                            maxBer = 44;       // (41+42+43+45+49)/5
+                            break;
+                        case 8:
+                            sirThreshold = -12; // (-11-11-12-13-13)/5
+                            maxBer = 44;
+                            break;
+                        case 9:
+                            sirThreshold = -14; // (-15-13-13-14-15)/5
+                            maxBer = 43;        // (33+38+45+50+50)/5
+                            break;
+                        case 10:
+                            sirThreshold = -18; // (-19-18-17-17-18)/5
+                            maxBer = 42;
+                            break;
+                        case 11:
+                            sirThreshold = -21; // (-22-22-21-20-20)/5
+                            maxBer = 42;
+                            break;
+                        case 12:
+                            sirThreshold = -24; // (-25-25-25-24-23)/5
+                            maxBer = 41;        // (38+40+42+43+43)/5
+                            break;
+                        default:
+                            throw std::invalid_argument("Invalid spreading factor");
+                    }
+
+                    if (sir >= sirThreshold) {
+                        // Signal survives, Interference?
+                        // Based on same SF study, interferer is always dropped
+                        //std::get<1>(tupleSignal)       += 0;
+                        std::get<1>(tupleInterference) = 1;
+                    }
+                    else {
+                        // Signal is dropped, Interference?
+                        // Based on same SF study, interferer is always dropped
+                        std::get<1>(tupleSignal)       = calculateProbabilityBER(maxBer, sirThreshold, sir);
+                        std::get<1>(tupleInterference) = 1;
+                    }
+
+                    // Send signal for statistic collection
+                    emit(signalInterference, 1u);
+                    emit(signalInterferenceCount, ++interferencesCount);
+                }
+
+                // There is no experimental case with different SFs
+                // and collision after the end of the preamble of interfered message
+            }
+            else {
+                // The two messages are transmitted using different channels.
+                // Check if the interferer message is transmitted during preamble of the signal message and
+                // using the same spreading factor
+
+                EV << "The signal and the possible interference are transmitted in different ch frequencies!\n";
+
+                if (isInterferingPreamble && sfInterference == sfSignal) {
+                    EV << "The signal and the possible interference are transmitted with the same spreading factor!\n";
+
+                    if (sfInterference >= 10) {
+                        // Strong interference
+                        float chDistance = abs(cfInterference - cfSignal);
+
+                        if (chDistance <= 0.2) {
+                            EV << "INTERFERENCE\n";
+
+                            // Interference between 95% and 99%
+                            // SF12 and bw 500 KHz -> interference 85%
+                            if (bwInterference == BANDWIDTH_500) {
+                                std::get<1>(tupleSignal)       += 0.85;
+                                std::get<1>(tupleInterference) += 0.85;
+                            }
+                            else {
+                                std::get<1>(tupleSignal)       += 0.97;
+                                std::get<1>(tupleInterference) += 0.97;
+                            }
+
+                            // Send signal for statistic collection
+                            emit(signalInterference, 1u);
+                            emit(signalInterferenceCount, ++interferencesCount);
+                        }
+                        else if (chDistance <= 0.4) {
+                            // SF12 and bw 125 KHz -> Interference 30%
+                            // SF11 and bw 125 KHz -> Interference 20%
+                            // SF10 and bw 125 KHz -> Interference 5%
+                            // SF12 and bw 250 KHz -> Interference 1%
+                            // bw 500 KHz -> interference 0%
+                            if (bwInterference == BANDWIDTH_125) {
+                                EV << "INTERFERENCE\n";
+
+                                switch (sfInterference) {
+                                    case 12:
+                                        std::get<1>(tupleSignal)       += 0.3;
+                                        std::get<1>(tupleInterference) += 0.3;
+                                        break;
+                                    case 11:
+                                        std::get<1>(tupleSignal)       += 0.2;
+                                        std::get<1>(tupleInterference) += 0.2;
+                                        break;
+                                    case 10:
+                                        std::get<1>(tupleSignal)       += 0.05;
+                                        std::get<1>(tupleInterference) += 0.05;
+                                        break;
+                                    default:
+                                        throw std::invalid_argument("Invalid spreading factor");
+                                }
+
+                                // Send signal for statistic collection
+                                emit(signalInterference, 1u);
+                                emit(signalInterferenceCount, ++interferencesCount);
+                            }
+                            else if (bwInterference == BANDWIDTH_250) {
+                                EV << "INTERFERENCE\n";
+
+                                std::get<1>(tupleSignal)       += 0.01;
+                                std::get<1>(tupleInterference) += 0.01;
+
+                                // Send signal for statistic collection
+                                emit(signalInterference, 1u);
+                                emit(signalInterferenceCount, ++interferencesCount);
+                            }
+                        }
+                        else if (chDistance <= 0.6) {
+                            // SF12 and bw 125 KHz -> Interference 5%
+                            // SF11 and bw 125 KHz -> Interference 0%
+                            // SF10 and bw 125 KHz -> Interference 0%
+                            // bw 250 KHz -> Interference 0%
+                            if (bwInterference == BANDWIDTH_125) {
+                                EV << "INTERFERENCE\n";
+
+                                std::get<1>(tupleSignal)       += 0.05;
+                                std::get<1>(tupleInterference) += 0.05;
+
+                                // Send signal for statistic collection
+                                emit(signalInterference, 1u);
+                                emit(signalInterferenceCount, ++interferencesCount);
+                            }
+                        }
+                    }
+                    /*else {
+                        // Weak interference
+                        continue;
+                    }*/
+                }
+            }
+
+            // Store updated entries
+            //interferences[msgSignal]       = tupleSignal;
+            //interferences[msgInterference] = tupleInterference;
+            interferences[signalId]       = tupleSignal;
+            interferences[interferenceId] = tupleInterference;
+        }
+
+        // Send signal for statistic collection
+        emit(signalInterferencePossible, 1u);
+        emit(signalInterferencePossibleCount, ++interferencesPossibleCount);
+    }
+
+    EV << "===========================================\n";
 }
 
 

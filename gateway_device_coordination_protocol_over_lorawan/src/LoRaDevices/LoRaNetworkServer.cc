@@ -92,6 +92,11 @@ class LoRaNetworkServer : public cSimpleModule {
 
     // Timeout to handle the transmissions on the channels to avoid busy channel error
     std::map<cMessage*, std::tuple<cPacket*, std::string, int>> eventTimeoutChannelTransmissions;
+
+
+    // For display strings during animation
+    unsigned long messagesIn;
+    unsigned long messagesOut;
     // ============ CLASS VARIABLES ==============
 
     // ============ CLASS FUNCTIONS ==============
@@ -122,6 +127,7 @@ class LoRaNetworkServer : public cSimpleModule {
       // The following redefined virtual function holds the algorithm.
       virtual void initialize() override;
       virtual void handleMessage(cMessage *msg) override;
+      virtual void refreshDisplay() const override;
 
   public:
     LoRaNetworkServer();
@@ -241,6 +247,10 @@ void LoRaNetworkServer::initialize() {
     timeoutLoRa = RX_DELAY_1 + 0.1 + TX_DELAY;
     timeoutTcp  = 3;
 
+
+    messagesIn  = 0;
+    messagesOut = 0;
+
     EV << "Network server initialized\n";
 }
 
@@ -267,6 +277,9 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
 
         // Remove the entry from the map
         eventTimeoutChannelTransmissions.erase(itTX);
+
+        // Delete the timeout message
+        delete msgIn;
 
         return;
     }
@@ -406,7 +419,8 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
                 appMsg->setCounter(appMsg->getCounter() + 1);
 
                 // Recalculate MIC
-                calculateMIC(dlMsg, appMsg, keyMIC);
+                //calculateMIC(dlMsg, appMsg, keyMIC);
+                calculateMIC(dlMsg, keyMIC);
 
                 // Encapsulate layers
                 //phyMsg->encapsulate(dlMsg);
@@ -627,6 +641,9 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
         // The message is a valid IP packet.
         std::array<uint8_t, IPv4_ADDRESS_SIZE> endDeviceAddress;
 
+        // Increase the number of messages received
+        messagesIn++;
+
         // Check if the packet has an encapsulated message
         if (encPacket != nullptr) {
             uint16_t counter;
@@ -817,6 +834,9 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
                 else
                     sendSecurely(this, eventTimeoutChannelTransmissions, msgOut, IP_GATEWAYS_GATE_OUT, msgIn->getArrivalGate()->getIndex());
                 //===================
+
+                // Increase the number of messages sent
+                messagesOut++;
 
                 delete msgIn;
                 return;
@@ -1038,6 +1058,9 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
                         //sendDelayedSecurely(this, eventTimeoutChannelTransmissions, msgOut, RX_DELAY_1 + 0.1, IP_GATEWAYS_GATE_OUT, msgIn->getArrivalGate()->getIndex());
                         //sendBroadcast(this, msgOut, IP_GATEWAYS_GATE_OUT);
 
+                        // Increase the number of messages sent
+                        messagesOut++;
+
                         delete msgIn;
                         return;
                     }
@@ -1160,6 +1183,9 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
                     //sendDelayedSecurely(this, eventTimeoutChannelTransmissions, msgOut->dup(), RX_DELAY_1 + 0.1, IP_GATEWAYS_GATE_OUT, msgIn->getArrivalGate()->getIndex());
                     //sendDelayedSecurely(this, eventTimeoutChannelTransmissions, msgOut, RX_DELAY_1 + 0.1, IP_GATEWAYS_GATE_OUT, msgIn->getArrivalGate()->getIndex());
                     //sendBroadcast(this, msgOut, IP_GATEWAYS_GATE_OUT);
+
+                    // Increase the number of messages sent
+                    messagesOut+= 2;
                 }
                 else {
                     // It is not arrived.
@@ -1554,6 +1580,14 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
 
         delete msgIn;
     }
+}
+
+void LoRaNetworkServer::refreshDisplay() const {
+    char buf[50] = {};
+    snprintf(buf, sizeof(buf), "in: %lu out: %lu", messagesIn, messagesOut);
+    getDisplayString().setTagArg("t", 0, buf);
+
+    // Do not consider TCP ACK for in & out messages
 }
 
 
