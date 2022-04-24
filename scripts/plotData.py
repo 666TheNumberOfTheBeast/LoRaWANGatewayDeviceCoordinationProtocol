@@ -205,7 +205,11 @@ if chart_type == "b":
   # Set a name per group in the middle of the group
   #plt.xticks([x + bar_width/2.0 for x in x_bars[0]], labels=groups)
   #plt.xticks([x + (bar_width * (len(labels)-1)) / 2.0 for x in x_bars[0]], labels=groups)
-  plt.xticks([x + (bar_width * (labels_num-1)) / 2.0 for x in x_bars[0]], labels=groups)
+  #plt.xticks([x + (bar_width * (labels_num-1)) / 2.0 for x in x_bars[0]], labels=groups)
+  if len(groups) <= 6:
+    plt.xticks([x + (bar_width * (labels_num-1)) / 2.0 for x in x_bars[0]], labels=groups)
+  else:
+    plt.xticks([x + (bar_width * (labels_num-1)) / 2.0 for x in x_bars[0]], labels=groups, fontsize=8, rotation=30)
 
   # Change x axis lower and upper bounds if few bars are displayed to reduce the "fatness" due to auto-scale
   if len(groups) == 1:
