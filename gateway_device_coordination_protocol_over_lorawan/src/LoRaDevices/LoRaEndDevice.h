@@ -130,6 +130,7 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     unsigned long messagesIn;
     unsigned long messagesOut;
     unsigned long messagesLost;
+    unsigned long messagesInvalid;
     unsigned long messagesRetransmitted;
     unsigned long interferencesCount;
     unsigned long interferencesPossibleCount;
@@ -173,6 +174,9 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     simtime_t dutyCycleStartInterval; // s
 
     cMessage* eventTimeoutDutyCycle;
+
+    bool realDeployment;
+    int timeLimit;
     // ============ CLASS VARIABLES ==============
 
     // ============ CLASS FUNCTIONS ==============
@@ -206,10 +210,12 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     simsignal_t signalSent;
     simsignal_t signalReceived;
     simsignal_t signalLost;
+    simsignal_t signalInvalid;
     simsignal_t signalRetransmitted;
     simsignal_t signalSentCount;
     simsignal_t signalReceivedCount;
     simsignal_t signalLostCount;
+    simsignal_t signalInvalidCount;
     simsignal_t signalRetransmittedCount;
 
     simsignal_t signalInterference;

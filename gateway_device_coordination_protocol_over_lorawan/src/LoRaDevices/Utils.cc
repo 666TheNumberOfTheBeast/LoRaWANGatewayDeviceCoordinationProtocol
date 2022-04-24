@@ -1696,7 +1696,7 @@ std::tuple<double, double> calculateTimeOnAir(omnetpp::cMessage* msg) {
         return std::tuple<double, double> {-1, -1};
 
     LoRaDatalinkFrame* dlMsg = dynamic_cast<LoRaDatalinkFrame*>(phyMsg->getEncapsulatedPacket());
-    if (!phyMsg)
+    if (!dlMsg)
         return std::tuple<double, double> {-1, -1};
 
     uint8_t frameType = dlMsg->getFType();

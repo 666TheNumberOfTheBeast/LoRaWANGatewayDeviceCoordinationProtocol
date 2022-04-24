@@ -26,6 +26,7 @@ network LoRaNetworkServerEdgeRealScenarioTest
 {
     parameters:
         bool realDeployment = true;
+        int timeLimit = 3600 * 24 * 10; // 10 days
         int region = default(1);
         int nEndDevices = default(0);
         int nGateways = default(0);

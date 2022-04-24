@@ -21,10 +21,13 @@ simple LoRaEndDevice
         @signal[sent](type="unsigned long");
         @signal[received](type="unsigned long");
         @signal[lost](type="unsigned long");
+        @signal[invalid](type="unsigned long");
         @signal[retransmitted](type="unsigned long");
+        
         @signal[sentCount](type="unsigned long");
         @signal[receivedCount](type="unsigned long");
         @signal[lostCount](type="unsigned long");
+        @signal[invalidCount](type="unsigned long");
         @signal[retransmittedCount](type="unsigned long");
         
         @signal[interference](type="unsigned long");
@@ -35,10 +38,13 @@ simple LoRaEndDevice
         @statistic[messageSent](title="messages sent"; source="sent"; record=histogram,vector; interpolationmode=none);
         @statistic[messageReceived](title="messages received"; source="received"; record=histogram,vector; interpolationmode=none);
         @statistic[messageLost](title="messages lost"; source="lost"; record=histogram,vector; interpolationmode=none);
+        @statistic[messageInvalid](title="messages invalid"; source="invalid"; record=histogram,vector; interpolationmode=none);
         @statistic[messageRetransmitted](title="messages retransmitted"; source="retransmitted"; record=histogram,vector; interpolationmode=none);
+        
         @statistic[messageSentCount](title="messages sent count"; source="sentCount"; record=histogram,vector; interpolationmode=none);
         @statistic[messageReceivedCount](title="messages received count"; source="receivedCount"; record=histogram,vector; interpolationmode=none);
         @statistic[messageLostCount](title="messages lost count"; source="lostCount"; record=histogram,vector; interpolationmode=none);
+        @statistic[messageInvalidCount](title="messages invalid count"; source="invalidCount"; record=histogram,vector; interpolationmode=none);
         @statistic[messageRetransmittedCount](title="messages retransmitted count"; source="retransmittedCount"; record=histogram,vector; interpolationmode=none);
         
         @statistic[interference](title="interferences"; source="interference"; record=histogram,vector; interpolationmode=none);

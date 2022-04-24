@@ -42,16 +42,33 @@ const int REGION_EU433 = 4;
 const int REGION_US915 = 2;
 const unsigned DUTY_CYCLE_INTERVAL = 3600; // s
 
+// 868.1 MHz and 868.3 MHz are the center frequencies, so a bandwidth of 125 KHz results in
+// [868.1 - 0.125/2, 868.1 + 0.125/2] = [868.0375, 868.1625] MHz and
+// [868.3 - 0.125/2, 868.3 + 0.125/2] = [868.2375, 868.3625] MHz
+// where the bandwidths are separated by 0.2 - 0.125 = 0.075 MHz.
+//
+//  <-- 62.5 KHz -->|<-- 62.5 KHz --><--- 75 KHz ---><-- 62.5 KHz -->|<-- 62.5 KHz -->
+//  |               |               |                |               |               |
+//                  |                                                |
+//               868.1 MHz                                        868.3 MHz
+//                  <--------------- 0.2 MHz = 200 KHz -------------->
+//
+// A bandwidth of 250 KHz results in
+// [868.1 - 0.250/2, 868.1 + 0.250/2] = [867.975, 868.225] MHz and
+// [868.3 - 0.250/2, 868.3 + 0.250/2] = [868.175, 868.425] MHz
+// where the bandwidths are separated by 0.2 - 0.250 = -0.05 MHz and therefore overlap.
+// Separate 250 KHz channels every two 125 KHz channels
+
 // EU868
 const uint8_t CHANNEL_FREQUENCIES_BW_125_EU_868   = 16;
-const float CHANNEL_FREQUENCY_START_BW_125_EU_868 = 868.1; // MHz
+const float CHANNEL_FREQUENCY_START_BW_125_EU_868 = 867.1; // MHz
 const float CHANNEL_FREQUENCY_STEP_BW_125_EU_868  = 0.2;   // MHz
 const uint8_t SPREADING_FACTOR_MAX_BW_125_EU_868  = 12;
 const uint8_t SPREADING_FACTOR_NUM_BW_125_EU_868  = 6;
 
-const uint8_t CHANNEL_FREQUENCIES_BW_250_EU_868   = 1;
-const float CHANNEL_FREQUENCY_START_BW_250_EU_868 = 868.1; // MHz
-const float CHANNEL_FREQUENCY_STEP_BW_250_EU_868  = 0.2;   // MHz
+const uint8_t CHANNEL_FREQUENCIES_BW_250_EU_868   = 8; //1;
+const float CHANNEL_FREQUENCY_START_BW_250_EU_868 = 867.1; // MHz
+const float CHANNEL_FREQUENCY_STEP_BW_250_EU_868  = 0.4;   // MHz
 const uint8_t SPREADING_FACTOR_MAX_BW_250_EU_868  = 7;
 const uint8_t SPREADING_FACTOR_NUM_BW_250_EU_868  = 1;
 
@@ -65,9 +82,9 @@ const float CHANNEL_FREQUENCY_STEP_BW_125_EU_433  = 0.2;     // MHz
 const uint8_t SPREADING_FACTOR_MAX_BW_125_EU_433  = 12;
 const uint8_t SPREADING_FACTOR_NUM_BW_125_EU_433  = 6;
 
-const uint8_t CHANNEL_FREQUENCIES_BW_250_EU_433   = 1;
+const uint8_t CHANNEL_FREQUENCIES_BW_250_EU_433   = 8; //1;
 const float CHANNEL_FREQUENCY_START_BW_250_EU_433 = 433.175; // MHz
-const float CHANNEL_FREQUENCY_STEP_BW_250_EU_433  = 0.2;   // MHz
+const float CHANNEL_FREQUENCY_STEP_BW_250_EU_433  = 0.4;     // MHz
 const uint8_t SPREADING_FACTOR_MAX_BW_250_EU_433  = 7;
 const uint8_t SPREADING_FACTOR_NUM_BW_250_EU_433  = 1;
 

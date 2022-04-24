@@ -75,8 +75,6 @@ class LoRaNetworkServer : public cSimpleModule {
     // - ACK sequence number
     // - is internal network?
     //std::map<std::array<uint8_t, IPv4_ADDRESS_SIZE>, std::tuple<cPacket*, cMessage*, uint32_t, uint32_t, uint32_t, bool>> mapTcp;
-
-    // replace last message sent to the address with last messages sent to the address
     std::map<std::array<uint8_t, IPv4_ADDRESS_SIZE>, std::tuple<std::list<cPacket*>, cMessage*, uint32_t, uint32_t, uint32_t, bool>> mapTcp;
 
     // Routing table for associating a gateway with a gate index
@@ -423,10 +421,7 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
                 calculateMIC(dlMsg, keyMIC);
 
                 // Encapsulate layers
-                //phyMsg->encapsulate(dlMsg);
                 dlMsg->encapsulate(appMsg);
-                //netMsg->encapsulate(dlMsg);
-                //traMsg->encapsulate(netMsg);
 
                 // Update message stored in the map
                 //std::get<0>(tuple) = traMsg;
@@ -537,7 +532,7 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
 
         // Check if the message is TCP
         if (isTcp) {
-            EV << "Received TCP/IP packet with seq num: " << sequenceNumber << "\n";
+            //EV << "Received TCP/IP packet with seq num: " << sequenceNumber << "\n";
             EV << "Received TCP/IP packet with ACK seq num: " << ackNumber << "\n";
 
             // Check if the source address is in the map of TCP/IP connections
@@ -549,6 +544,7 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
                 // Get the entry
                 tuple = it->second;
 
+                // Simplification
                 if (ackNumber > std::get<3>(tuple) + 1) {
                     // Invalid ACK number
                     delete msgIn;
@@ -657,6 +653,8 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
             error = isValidLoRaFrame(
                     encPacket, &frameType, endDeviceAddress.data(), &counter, &port, payloadIn,
                     &spreadingFactor, &transmissionPower, &bandwidth, &channelFrequency);
+            EV << "Error: " << (unsigned) error << "\n";
+            EV << "Frame Type: " << (unsigned) frameType << "\n";
             if (error) {
                 printError(error);
                 delete msgIn;
@@ -1465,6 +1463,7 @@ void LoRaNetworkServer::handleMessage(cMessage *msgIn) {
 
             // Check if a CONNECTION_GW message about the end device is already arrived
             if (!std::get<3>(tuple)) {
+                // It is not arrived
                 EV << "Init the entry\n";
 
                 // Init the entry
@@ -1757,10 +1756,12 @@ uint8_t LoRaNetworkServer::isValidMessageIp(
 
             EV << "Received TCP/IP packet with seq num: " << sequenceNumber << "\n";
             EV << "Stored TCP/IP packet sequence number IN: " << std::get<2>(tuple) << "\n";
-            if (sequenceNumber < std::get<2>(tuple))
-                return BAD_COUNTER;
 
             // Simplified version of TCP/IP control without packet ordering
+            //if (sequenceNumber < std::get<2>(tuple))
+            if (sequenceNumber < std::get<2>(tuple) || sequenceNumber > std::get<2>(tuple) + 1)
+                return BAD_COUNTER;
+
         }
         // Check if no message is received by the IP address but the sequence number is not 1
         else if (sequenceNumber != 1)
@@ -1823,10 +1824,14 @@ void LoRaNetworkServer::printError(uint8_t error) {
         case BAD_ADDRESS:
             EV << "Received packet for a different IP address\n";
             break;
+        case BAD_MIC:
+            EV << "Received invalid MIC in the frame\n";
+            break;
+        case BAD_COUNTER:
+            EV << "Received invalid counter in the frame\n";
+            break;
         case BAD_PORT:
-            EV << "Received invalid port in the packet or frame\n";
-            // Only a message can be received in a receive window
-            //message_received = MSG_MAC_CMD;
+            EV << "Received invalid port in the message\n";
             break;
         default:
             EV << "Received invalid frame\n";
@@ -1855,10 +1860,17 @@ void LoRaNetworkServer::sendMessageTcp(
         // Check if a timeout exists for a previous transmission
         if (std::get<1>(tuple)) {
             // Cancel old timeout
-            cancelEvent(std::get<1>(tuple));
+            //cancelEvent(std::get<1>(tuple));
 
             // Rename timeout
-            std::get<1>(tuple)->setName(timeoutName);
+            //std::get<1>(tuple)->setName(timeoutName);
+
+            // Check if the timeout is not currently running
+            if (!std::get<1>(tuple)->isScheduled()) {
+                // Do not remove the entry from the table or delete the timer to reuse it (session).
+                // Rename timeout
+                std::get<1>(tuple)->setName(timeoutName);
+            }
         }
         else {
             // Create timeout
@@ -1937,7 +1949,9 @@ void LoRaNetworkServer::sendMessageTcp(
         //sendBroadcast(this, msgOut->dup(), gateName);
         sendBroadcastSecurely(this, eventTimeoutChannelTransmissions, msgOut->dup(), gateName);
 
-    scheduleAt(simTime() + timeoutTcp, std::get<1>(tuple));
+    // Check if the timeout is not currently running
+    if (!std::get<1>(tuple)->isScheduled())
+        scheduleAt(simTime() + timeoutTcp, std::get<1>(tuple));
 }
 
 

@@ -161,17 +161,21 @@ void LoRaEndDevice::initialize() {
     messagesIn            = 0;
     messagesOut           = 0;
     messagesLost          = 0;
+    messagesInvalid       = 0;
     messagesRetransmitted = 0;
     interferencesCount         = 0;
     interferencesPossibleCount = 0;
 
 
     cModule* parent = getParentModule();
-    bool realDeployment = parent->par("realDeployment").boolValue();
+    realDeployment = parent->par("realDeployment").boolValue();
+    timeLimit      = 0;
     const int nGateways = parent->par("nGateways").intValue();
 
     // Check if the configuration consists of a real deployment
     if (realDeployment) {
+        timeLimit = parent->par("timeLimit").intValue();
+
         // Locate the end device according to the RSSIs of in range gateways retrieved from the dataset.
         // Get all RSSIs and spreading factors values
         cValueArray* RSSIs_ = (cValueArray*) parent->par("RSSIs").objectValue();
@@ -706,10 +710,12 @@ void LoRaEndDevice::initialize() {
     signalSent               = registerSignal("sent");
     signalReceived           = registerSignal("received");
     signalLost               = registerSignal("lost");
+    signalInvalid            = registerSignal("invalid");
     signalRetransmitted      = registerSignal("retransmitted");
     signalSentCount          = registerSignal("sentCount");
     signalReceivedCount      = registerSignal("receivedCount");
     signalLostCount          = registerSignal("lostCount");
+    signalInvalidCount       = registerSignal("invalidCount");
     signalRetransmittedCount = registerSignal("retransmittedCount");
     signalInterference              = registerSignal("interference");
     signalInterferencePossible      = registerSignal("interferencePossible");
@@ -723,9 +729,19 @@ void LoRaEndDevice::initialize() {
     // Start with a transmission window
     EV << "Starting timeout for opening the transmission window...\n";
     //scheduleAt(simTime(), eventTimeoutTX);  // XXX: temp for heavy testing
-    // Wake up end devices in different moments in time
-    // to better simulate the OTAA endings and the beginnings of the pairing algorithms of end devices
-    scheduleAt(simTime() + ((rand() + (int) uniform(0, 600)) % 600), eventTimeoutTX);
+    // Wake up end devices in different moments in time ([0, 600] seconds)
+    // to better simulate the OTAA beginnings of the end devices and reduce collisions.
+    // (600 seconds interval supports all tests till 320-3 and 100-16)
+    //int time = (rand() + (int) uniform(0, 600)) % 600;
+    std::random_device rd {};
+    std::mt19937 gen { rd() };
+    std::uniform_int_distribution<> distribution(0, 600);
+    //std::uniform_int_distribution<> distribution(0, 1800);
+    //std::uniform_int_distribution<> distribution(0, 2400);
+    int time = distribution(gen);
+
+    EV << "Activation time: " << time << "\n";
+    scheduleAt(simTime() + time, eventTimeoutTX);//*/
 
 
     // t0 => TRANSMISSION WINDOW TILL t1
@@ -761,15 +777,14 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
         if (dutyCycle > 0 && dutyCycleUsed/DUTY_CYCLE_INTERVAL > dutyCycle) {
             EV << "Duty cycle limit!\n";
 
-            // Schedule receive windows
-            EV << "Starting timeouts for opening the receive windows...\n";
-            simtime_t simtime = simTime();
-            scheduleAt(simtime + RX_DELAY_1, eventTimeoutRX1);
-            scheduleAt(simtime + RX_DELAY_2, eventTimeoutRX2);
+            // Set a random wake up after the duty cycle is reset
+            simtime_t waitTime = dutyCycleStartInterval + DUTY_CYCLE_INTERVAL + (rand() + (int) uniform(0, 600)) % 600;
 
             // Schedule next transmission window
             EV << "Starting timeout for opening the next transmission window...\n";
-            scheduleAt(simtime + TX_DELAY, eventTimeoutTX);
+            //simtime_t simtime = simTime();
+            //scheduleAt(simtime + TX_DELAY, eventTimeoutTX);
+            scheduleAt(waitTime, eventTimeoutTX);
 
             return;
         }
@@ -782,7 +797,11 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
 
         // Get a random channel frequency on which transmit (based on the SF and current deployment region)
         auto channelFrequencies_ = channelFrequencies[bandwidth];
-        float channelFrequency   = channelFrequencies_[(rand() + (int) uniform(0, 40)) % channelFrequencies_.size()];
+        //float channelFrequency   = channelFrequencies_[(rand() + (int) uniform(0, 40)) % channelFrequencies_.size()];
+        std::random_device rd {};
+        std::mt19937 gen { rd() };
+        std::uniform_int_distribution<> distribution(0, channelFrequencies_.size()-1);
+        float channelFrequency = channelFrequencies_[distribution(gen)];
 
         EV << "Spreading Factor: " << (int) spreadingFactor << "\n";
         EV << "Bandwidth: " << bandwidth << " KHz\n";
@@ -1455,7 +1474,8 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
         }
         // Disabled for evaluating the number of messages of the Gateway-Device coordination protocol.
         // Enable for evaluating the correctness of the entire protocol
-        /*else {
+        //else {
+        else if (realDeployment && simTime() < timeLimit) {
             // Pairing algorithm is ended
             EV << "Sending data...\n";
 
@@ -1484,7 +1504,24 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
                 associationSKey,
                 spreadingFactor, transmissionPower, bandwidth, channelFrequency);
             sendMessage(false);
-        }//*/
+
+            // Schedule every 30 minutes (from the dataset)
+
+            // Send signal for statistic collection
+            //emit(signalSent, 1u);
+            //emit(signalSentCount, ++messagesOut);
+
+            // Schedule receive windows where start times are defined using the end of the transmission as a reference
+            EV << "Starting timeouts for opening the receive windows...\n";
+            scheduleAt(msgOutArrivalTime + 1800-2, eventTimeoutRX1);
+            scheduleAt(msgOutArrivalTime + 1800-1, eventTimeoutRX2);
+
+            // Schedule next transmission window
+            EV << "Starting timeout for opening the next transmission window...\n";
+            scheduleAt(msgOutArrivalTime + 1800, eventTimeoutTX);
+
+            return;
+        }
         else{
             // Terminate and notify gateways to stop the simulation when all end devices have finished the protocol run
             cModule* parent = getParentModule();
@@ -1501,7 +1538,7 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
             eventTimeoutDutyCycle = nullptr;
 
             return;
-        }//*/
+        }
 
         // Send signal for statistic collection
         emit(signalSent, 1u);
@@ -1509,16 +1546,26 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
 
         // Schedule receive windows where start times are defined using the end of the transmission as a reference
         EV << "Starting timeouts for opening the receive windows...\n";
-        //simtime_t simtime = simTime();
-        //scheduleAt(simtime + RX_DELAY_1, eventTimeoutRX1);
-        //scheduleAt(simtime + RX_DELAY_2, eventTimeoutRX2);
         scheduleAt(msgOutArrivalTime + RX_DELAY_1, eventTimeoutRX1);
         scheduleAt(msgOutArrivalTime + RX_DELAY_2, eventTimeoutRX2);
 
         // Schedule next transmission window
         EV << "Starting timeout for opening the next transmission window...\n";
-        //scheduleAt(simtime + TX_DELAY, eventTimeoutTX);
-        scheduleAt(msgOutArrivalTime + TX_DELAY, eventTimeoutTX);
+        //scheduleAt(msgOutArrivalTime + TX_DELAY, eventTimeoutTX);
+
+        // Change transmit periodicity to prevent synchronization of end device transmissions
+        // when downlinks are not expected to be retransmitted
+        if (stage == STAGE_HELLO || stage == STAGE_FORWARD)
+            scheduleAt(msgOutArrivalTime + TX_DELAY, eventTimeoutTX);
+        else {
+            std::random_device rd {};
+            std::mt19937 gen { rd() };
+            std::uniform_int_distribution<> distribution(0, 60);
+
+            int waitTime = distribution(gen);
+            //EV << "Wake up after " << (msgOutArrivalTime+TX_DELAY+waitTime-simTime()) << " seconds\n";
+            scheduleAt(msgOutArrivalTime + TX_DELAY + waitTime, eventTimeoutTX);
+        }
     }
     else if (msgIn == eventTimeoutRX1) {
         // Previous window is ended, update the transmission window state of the end device
@@ -1541,13 +1588,14 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
     else {
         // The message is not a timeout and comes from another LoRa device.
         // Check if the end device is listening
-        if (transmissionWindowState == WINDOW_TX) {
-            EV << "The device is not in a receive window\n";
-            delete msgIn;
-            return;
-        }
-        if (messageReceived) {
-            EV << "Already listened a frame in this receive window\n";
+        if (transmissionWindowState == WINDOW_TX || messageReceived) {
+            messageReceived ? EV << "Already listened a frame in this receive window\n" :
+                              EV << "The device is not in a receive window\n";
+
+            // Send signal for statistic collection
+            emit(signalInvalid, 1u);
+            emit(signalInvalidCount, ++messagesInvalid);
+
             delete msgIn;
             return;
         }
@@ -1594,6 +1642,11 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
 
         if (error && error != BAD_REQUEST_ID) {
             printError(error);
+
+            // Send signal for statistic collection
+            emit(signalInvalid, 1u);
+            emit(signalInvalidCount, ++messagesInvalid);
+
             delete msgIn;
             return;
         }
@@ -1657,8 +1710,12 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
             stage = STAGE_GENERATE_COMMON_KEY;
 
             // Wake up when the gateway activation should be finished ([180, 360] seconds)
-            int waitTime = 180 + (rand() + (int) uniform(0, 180)) % 181;
+            //int waitTime = 180 + (rand() + (int) uniform(0, 180)) % 181;
             //int waitTime = 10 + (rand() + (int) uniform(0, 180)) % 3; // XXX: temp for heavy testing
+            std::random_device rd {};
+            std::mt19937 gen { rd() };
+            std::uniform_int_distribution<> distribution(180, 360);
+            int waitTime = distribution(gen);
             EV << "Wake up after " << waitTime << " seconds\n";
             scheduleAt(simTime() + waitTime, eventTimeoutTX);
 
@@ -2035,13 +2092,18 @@ void LoRaEndDevice::printError(uint8_t error) {
         case BAD_ADDRESS:
             EV << "Received frame for a different end device address\n";
             break;
-        case BAD_PORT:
-            EV << "Received invalid port in the frame\n";
+        case BAD_MIC:
+            EV << "Received invalid MIC in the frame\n";
             // Only a message can be received in a receive window
             //messageReceived = MSG_MAC_CMD;
             break;
         case BAD_COUNTER:
             EV << "Received invalid counter in the frame\n";
+            // Only a message can be received in a receive window
+            //messageReceived = MSG_MAC_CMD;
+            break;
+        case BAD_PORT:
+            EV << "Received invalid port in the frame\n";
             // Only a message can be received in a receive window
             //messageReceived = MSG_MAC_CMD;
             break;

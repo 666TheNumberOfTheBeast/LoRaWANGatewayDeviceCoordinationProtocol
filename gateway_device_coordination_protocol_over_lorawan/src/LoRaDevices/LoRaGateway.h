@@ -127,17 +127,56 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
 
 
     // For statistics
+    // Protocol
     unsigned long messagesSentCount;
     unsigned long messagesReceivedCount;
+    unsigned long messagesLostCount;
+    unsigned long messagesInvalidCount;
+
     unsigned long messagesSentLoRaCount;
     unsigned long messagesReceivedLoRaCount;
+    unsigned long messagesLostLoRaCount;
+    unsigned long messagesInvalidLoRaCount;
+    unsigned long messagesSentLoRaGatewaysCount;
+    unsigned long messagesReceivedLoRaGatewaysCount;
+    unsigned long messagesLostLoRaGatewaysCount;
+    //unsigned long messagesInvalidLoRaGatewaysCount;
+    unsigned long messagesSentLoRaDevicesCount;
+    unsigned long messagesReceivedLoRaDevicesCount;
+    unsigned long messagesLostLoRaDevicesCount;
+    //unsigned long messagesInvalidLoRaDevicesCount;
+
     unsigned long messagesSentIpCount;
     unsigned long messagesReceivedIpCount;
-    unsigned long messagesLostCount;
-    unsigned long messagesLostLoRaCount;
     unsigned long messagesLostIpCount;
+    unsigned long messagesInvalidIpCount;
+    unsigned long messagesSentIpGatewaysCount;
+    unsigned long messagesReceivedIpGatewaysCount;
+    unsigned long messagesLostIpGatewaysCount;
+    //unsigned long messagesInvalidIpGatewaysCount;
+    unsigned long messagesSentIpServerCount;
+    unsigned long messagesReceivedIpServerCount;
+    unsigned long messagesLostIpServerCount;
+    //unsigned long messagesInvalidIpServerCount;
+
     unsigned long interferencesCount;
     unsigned long interferencesPossibleCount;
+
+    // Data
+    unsigned long messagesSentDataCount;
+    unsigned long messagesReceivedDataCount;
+    unsigned long messagesLostDataCount;
+    unsigned long messagesInvalidDataCount;
+
+    unsigned long messagesSentGatewaysDataCount;
+    unsigned long messagesReceivedGatewaysDataCount;
+
+    unsigned long messagesSentServerDataCount;
+    unsigned long messagesReceivedDevicesDataCount;
+
+    unsigned long interferencesDataCount;
+    unsigned long interferencesPossibleDataCount;
+
 
     // Position of the gateway for creating communication channels only with gateways and end devices in the radio range
     unsigned posX;
@@ -240,6 +279,8 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
     //std::tuple<double, float> applyExternalNoise(cMessage* msg, int rssi, uint8_t sf, float bw);
     //std::tuple<int, float> applyExternalNoise(cMessage* msg, int rssi);
     //std::tuple<double, float> applyExternalNoise(cMessage* msg, int rssi);
+    void sendSignalInterference(bool isDataInterferer, bool isDataInterfered);
+    void sendSignalSentIp(bool isDataMessage, std::array<uint8_t, IPv4_ADDRESS_SIZE>& destAddress);
 
     uint8_t getCpuLoad();
     uint8_t getGpuLoad();
@@ -253,30 +294,112 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
 
     // ============ CLASS SIGNALS ==============
     // Class signals for statistic collection
+    // Protocol
     simsignal_t signalSent;
     simsignal_t signalReceived;
+    simsignal_t signalLost;
+    simsignal_t signalInvalid;
+
     simsignal_t signalSentLoRa;
     simsignal_t signalReceivedLoRa;
+    simsignal_t signalLostLoRa;
+    simsignal_t signalInvalidLoRa;
+
+    simsignal_t signalSentLoRaGateways;
+    simsignal_t signalReceivedLoRaGateways;
+    simsignal_t signalLostLoRaGateways;
+    //simsignal_t signalInvalidLoRaGateways;
+
+    simsignal_t signalSentLoRaDevices;
+    simsignal_t signalReceivedLoRaDevices;
+    simsignal_t signalLostLoRaDevices;
+    //simsignal_t signalInvalidLoRaDevices;
+
     simsignal_t signalSentIp;
     simsignal_t signalReceivedIp;
-    simsignal_t signalLost;
-    simsignal_t signalLostLoRa;
     simsignal_t signalLostIp;
+    simsignal_t signalInvalidIp;
+
+    simsignal_t signalSentIpGateways;
+    simsignal_t signalReceivedIpGateways;
+    simsignal_t signalLostIpGateways;
+    //simsignal_t signalInvalidIpGateways;
+
+    simsignal_t signalSentIpServer;
+    simsignal_t signalReceivedIpServer;
+    simsignal_t signalLostIpServer;
+    //simsignal_t signalInvalidIpServer;
+
 
     simsignal_t signalSentCount;
     simsignal_t signalReceivedCount;
+    simsignal_t signalLostCount;
+    simsignal_t signalInvalidCount;
+
     simsignal_t signalSentLoRaCount;
     simsignal_t signalReceivedLoRaCount;
+    simsignal_t signalLostLoRaCount;
+    simsignal_t signalInvalidLoRaCount;
+
+    simsignal_t signalSentLoRaGatewaysCount;
+    simsignal_t signalReceivedLoRaGatewaysCount;
+    simsignal_t signalLostLoRaGatewaysCount;
+    //simsignal_t signalInvalidLoRaGatewaysCount;
+
+    simsignal_t signalSentLoRaDevicesCount;
+    simsignal_t signalReceivedLoRaDevicesCount;
+    simsignal_t signalLostLoRaDevicesCount;
+    //simsignal_t signalInvalidLoRaDevicesCount;
+
     simsignal_t signalSentIpCount;
     simsignal_t signalReceivedIpCount;
-    simsignal_t signalLostCount;
-    simsignal_t signalLostLoRaCount;
     simsignal_t signalLostIpCount;
+    simsignal_t signalInvalidIpCount;
+
+    simsignal_t signalSentIpGatewaysCount;
+    simsignal_t signalReceivedIpGatewaysCount;
+    simsignal_t signalLostIpGatewaysCount;
+    //simsignal_t signalInvalidIpGatewaysCount;
+
+    simsignal_t signalSentIpServerCount;
+    simsignal_t signalReceivedIpServerCount;
+    simsignal_t signalLostIpServerCount;
+    //simsignal_t signalInvalidIpServerCount;
 
     simsignal_t signalInterference;
     simsignal_t signalInterferencePossible;
     simsignal_t signalInterferenceCount;
     simsignal_t signalInterferencePossibleCount;
+
+
+    // Data
+    simsignal_t signalSentData;
+    simsignal_t signalReceivedData;
+    simsignal_t signalLostData;
+    simsignal_t signalInvalidData;
+
+    simsignal_t signalSentGatewaysData;
+    simsignal_t signalReceivedGatewaysData;
+
+    simsignal_t signalSentServerData;
+    simsignal_t signalReceivedDevicesData;
+
+    simsignal_t signalSentDataCount;
+    simsignal_t signalReceivedDataCount;
+    simsignal_t signalLostDataCount;
+    simsignal_t signalInvalidDataCount;
+
+    simsignal_t signalSentGatewaysDataCount;
+    simsignal_t signalReceivedGatewaysDataCount;
+
+    simsignal_t signalSentServerDataCount;
+    simsignal_t signalReceivedDevicesDataCount;
+
+    simsignal_t signalInterferenceData;
+    simsignal_t signalInterferencePossibleData;
+    simsignal_t signalInterferenceDataCount;
+    simsignal_t signalInterferencePossibleDataCount;
+
 
     simsignal_t signalRSSI;
 
