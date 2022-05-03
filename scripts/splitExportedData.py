@@ -1,25 +1,10 @@
 import pandas as pd
 import numpy as np
-#import sys
 import argparse
 
 from pathlib import Path
 from datetime import datetime
 
-'''
-if len(sys.argv) < 2:
-    sys.exit("No file to open!\nUsage: python3 " + sys.argv[0] + " <filename.csv> [<out_directory_parent>]")
-
-# URL to .csv file
-data_url = sys.argv[1]
-
-# Check if the directory where to put results is provided
-if len(sys.argv) == 3:
-    # Check if the final "/" is included in the string
-    out_directory_parent = sys.argv[2]
-    if out_directory_parent[-1] != "/":
-        out_directory_parent += "/"
-'''
 
 parser = argparse.ArgumentParser()
 parser.add_argument("filename", type=str, help="The name of the file with exported data")
@@ -51,7 +36,7 @@ compute_median = args.M
 #pd.set_option('display.max_rows', None)
 
 # Read input file
-df = pd.read_csv(data_url)
+df = pd.read_csv(data_url, dtype={"vectime": object, "vecvalue": object})
 
 # Get columns of interest
 df = df[["module", "name", "vectime", "vecvalue"]]
@@ -105,24 +90,9 @@ def toCSV(row):
 
     #print(filename + " saved into " + out_directory)
 
-#df.apply(toCSV, axis=1)
-
-'''
-# Convert the time and value strings to lists
-def toArray(row):
-    row["vectime"]  = row["vectime"].split()
-    row["vecvalue"] = row["vecvalue"].split()
-
-    return row
-
-df = df.apply(toArray, axis=1)
-print(df)'''
-
 
 
 if compute_mean or compute_median:
-    #max_len = 0
-
     # Convert the time and value strings to lists and get the max len
     def toArray(row):
         #global max_len
@@ -137,38 +107,77 @@ if compute_mean or compute_median:
         return row
 
     df = df.apply(toArray, axis=1)
-    #print(df)
-
-    #print("\nmax len:", max_len)
+    #print("Filtered dataset cols converted to lists:\n", df)
 
 
     # Get the length of every list
     df["len"] = df["vectime"].apply(len)
-    #print(df)
+    #print("\n\nAdded list lenghts:\n", df)
 
     # Get the max length per group
     max_lens = df.groupby(["module", "name"])["len"].max()
 
     # Join the max length with the general data frame
     df = df.merge(max_lens.to_frame("max_len"), left_on=["module", "name"], right_on=["module", "name"])
-    #print(df)
+    #print("\n\nAdded max list lenghts per group:\n", df)
 
 
     # Pad lists of time and value
     def padArray(row):
-        #pad_len = max_len - len(row["vectime"])
+        # Get the number of items to be appended as padding
         pad_len = row["max_len"] - len(row["vectime"])
 
+        # Check if padding is not necessary
+        if pad_len == 0:
+            row["vectime"]  = np.array( row["vectime"] )
+            row["vecvalue"] = np.array( row["vecvalue"] )
+            return row
+
+        # Calculate the mean of time intervals
+        vectime_intervals_len = len(row["vectime"])-1
+
+        # Check if the vector contains at least two values
+        if vectime_intervals_len > 0:
+            # Calculate the mean
+            pad_time = 0
+            for i in range(vectime_intervals_len):
+                pad_time += row["vectime"][i+1] - row["vectime"][i]
+                #print(pad_time)
+            pad_time /= vectime_intervals_len
+            #print("mean time interval:", pad_time)
+        else:
+            # Get the only available time
+            pad_time = row["vectime"][-1]
+
+        # Check if the row refers to a count
+        if "Count" in row["name"]     or \
+           "connected" in row["name"] or \
+           "cpu" in row["name"]       or \
+           "gpu" in row["name"]       or \
+           "ram" in row["name"]       or \
+           "storage" in row["name"]:
+            # Pad with last recorded value to keep the line constant
+            pad_value = row["vecvalue"][-1]
+        else:
+            # Pad with zero to denote no more sending
+            pad_value = 0
+
+        padding_time = [row["vectime"][-1]+(i+1)*pad_time for i in range(pad_len)]
+        padding_value = [pad_value for _ in range(pad_len)]
+
+
+
+
         # Pad with zeros (bad idea for calculating the mean)
-        #padding = [0 for i in range(pad_len)]
+        #padding = [0 for _ in range(pad_len)]
         #row["vectime"]  = np.array( row["vectime"] + padding )
         #row["vecvalue"] = np.array( row["vecvalue"] + padding )
 
         # Pad with last recorded value to keep the line constant
-        pad_time = row["vectime"][-1]
+        '''pad_time = row["vectime"][-1]
         padding_time = [pad_time for _ in range(pad_len)]
         pad_value = row["vecvalue"][-1]
-        padding_value = [pad_value for _ in range(pad_len)]
+        padding_value = [pad_value for _ in range(pad_len)]'''
 
         row["vectime"]  = np.array( row["vectime"] + padding_time )
         row["vecvalue"] = np.array( row["vecvalue"] + padding_value )
@@ -176,7 +185,7 @@ if compute_mean or compute_median:
         return row
 
     df = df.apply(padArray, axis=1)
-    #print(df)
+    #print("\n\nPadded lists:\n", df)
 
 
     # Get group sizes
@@ -184,7 +193,7 @@ if compute_mean or compute_median:
 
     # Join the group sizes with the general data frame
     df = df.merge(df_count.to_frame("count"), left_on=["module", "name"], right_on=["module", "name"])
-    #print(df)
+    #print("\n\nAdded group sizes:\n", df)
 
     # Get the max size of the groups
     max_group_size = df["count"].max()
@@ -197,32 +206,22 @@ if compute_mean or compute_median:
         global missing_rows
 
         max_len = row["max_len"]
+        #print("max_len: ", max_len)
+        #print("max_group_size - row['count']: ", max_group_size - row["count"])
         for i in range(max_group_size - row["count"]):
             missing_rows.append([row["module"], row["name"], [0 for _ in range(max_len)], [0 for _ in range(max_len)], max_len, max_len, max_group_size])
 
         row["count"] = max_group_size
         return row
 
+    
     # Filter groups with less than max_group_size items and fill it with missing items
-    df.groupby(["module", "name"]).filter(lambda x: len(x) < max_group_size).apply(fillGroup, axis=1)
+    #df.groupby(["module", "name"]).filter(lambda x: len(x) < max_group_size).apply(fillGroup, axis=1)
+    df[df["count"] < max_group_size][["module", "name", "max_len", "count"]].drop_duplicates().apply(fillGroup, axis=1)
 
     # Append missing rows to the general data frame
     df = pd.concat([df, pd.DataFrame(missing_rows, columns=df.columns)])
-
-
-
-
-
-    #prova = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.gateways[0]") & (df["name"] == "cpu:vector")]
-    #prova = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.gateways[0]") & (df["name"] == "connected:vector")]
-    #prova = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.gateways[0]") & (df["name"] == "messageLostCount:vector")]
-    #prova = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.endDevices[6]") & (df["name"] == "messageReceivedCount:vector")]
-    #prova = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.endDevices[0]") & (df["name"] == "messageReceivedCount:vector")]
-    #prova = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.endDevices[0]") & (df["name"] == "messageSentCount:vector")]
-    #prova = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.endDevices[0]") & (df["name"] == "messageRetransmittedCount:vector")]
-    #print(prova)
-
-    #pd.set_option('display.max_rows', None)
+    #print("\n\nAppended missing rows per group:\n", df)
 
     # Calculate mean or median of times and values
     op = np.mean if compute_mean else np.median
@@ -231,80 +230,106 @@ if compute_mean or compute_median:
 
     # Join the results
     df = times_mean.merge(values_mean, on=["module", "name"])
+    #print("\n\nOperation applied (mean or median):\n", df)
+    
+
+
+
+
+    '''
+    # EXAMPLE
+    print("#"*6000)
+    #pd.set_option("display.max_columns", None)
+    #pd.set_option("display.max_colwidth", None)
+
+    # Read input file
+    df = pd.read_csv(data_url)
+
+    # Get columns of interest
+    df = df[["module", "name", "vectime", "vecvalue"]]
     #print(df)
 
-    '''
-    print("\n")
-    print(prova)
-    print("\n")
-    #p = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.gateways[0]") & (df["name"] == "messageLostCount:vector")]
-    #p = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.endDevices[6]") & (df["name"] == "messageReceivedCount:vector")]
-    #p = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.endDevices[0]") & (df["name"] == "messageReceivedCount:vector")]
-    #p = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.endDevices[0]") & (df["name"] == "messageSentCount:vector")]
-    p = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.endDevices[0]") & (df["name"] == "messageRetransmittedCount:vector")]
-    print(p)
+    # Drop rows having a null value
+    df = df.dropna()
 
-    print("\nvectimes group:")
-    prova["vectime"].apply(print)
-    print("\nvecvalues group:")
-    prova["vecvalue"].apply(print)
-    
-    print("\nvectimes mean:")
-    p["vectime"].apply(print)
-    print("\nvecvalues mean:")
-    p["vecvalue"].apply(print)
-    '''
-
-
-
-    '''
     # Filter rows
-    prova = df[(df["module"] == "LoRaNetworkServerEdgeRealScenarioTest.gateways[0]") & (df["name"] == "cpu:vector")]
-    print(prova)
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[0]") & (df["name"] == "cpu:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[0]") & (df["name"] == "connected:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[0]") & (df["name"] == "messageLostCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[1]") & (df["name"] == "messageLostCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[2]") & (df["name"] == "messageLostCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[0]") & (df["name"] == "messageSentCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[0]") & (df["name"] == "messageSentLoRaGatewaysCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[1]") & (df["name"] == "messageSentLoRaGatewaysCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[2]") & (df["name"] == "messageSentLoRaGatewaysCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[0]") & (df["name"] == "messageSentLoRaGateways:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[1]") & (df["name"] == "messageSentLoRaGateways:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.gateways[2]") & (df["name"] == "messageSentLoRaGateways:vector")]
+    #prova = df[df["name"] == "connected:vector"]
+    prova = df[df["name"] == "cpu:vector"]
+    #prova = df[df["name"] == "storage:vector"]
 
-    #prova["vectime"]  = prova["vectime"].apply(len)
-    #prova["vecvalue"] = prova["vecvalue"].apply(len)
-    #print(prova)
 
-    print("\nmax len:", max_len)
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.endDevices[6]") & (df["name"] == "messageReceivedCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.endDevices[0]") & (df["name"] == "messageReceivedCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.endDevices[0]") & (df["name"] == "messageSentCount:vector")]
+    #prova = df[(df["module"] == "LoRaNetworkServerEdgeStochasticScenarioTest.endDevices[0]") & (df["name"] == "messageRetransmittedCount:vector")]
+    print("\nFiltered dataset:\n", prova)
 
-    # Pad lists of time and value with zeros
-    def padArray(row):
-        #print("vectime len:", len(row["vectime"]))
-        #print("vecvalue len:", len(row["vecvalue"]))
+    # Convert the time and value strings to lists
+    prova = prova.apply(toArray, axis=1)
+    print("\n\nFiltered dataset cols converted to lists:\n", prova)
 
-        pad_len = max_len - len(row["vectime"])
-        padding = [0 for i in range(pad_len)] 
 
-        row["vectime"]  = np.array( row["vectime"] + padding )
-        row["vecvalue"] = np.array( row["vecvalue"] + padding )
+    # Get the length of every list
+    prova["len"] = prova["vectime"].apply(len)
+    print("\n\nAdded list lenghts:\n", prova)
 
-        #print("vectime padded len:", len(row["vectime"]))
-        #print("vecvalue padded len:", len(row["vecvalue"]))
-        #print(row["vectime"])
-        #print(row["vecvalue"])
+    # Get the max length per group
+    max_lens = prova.groupby(["module", "name"])["len"].max()
 
-        #row["vectime"]  = np.array([0,1,2])
-        #row["vecvalue"] = np.array([1,2,3])
+    # Join the max length with the general data frame
+    prova = prova.merge(max_lens.to_frame("max_len"), left_on=["module", "name"], right_on=["module", "name"])
+    print("\n\nAdded max list lenghts per group:\n", prova)
 
-        #a = [np.random.randint(0, 10, 10)]
-        #print(a)
-        
-        return row
-
+    # Pad lists of time and value
     prova = prova.apply(padArray, axis=1)
-    print(prova)
+    print("\n\nPadded lists:\n", prova)
 
-    #prova = prova.groupby(["module", "name"])[["vectime", "vecvalue"]].apply(np.mean)
-    #times_mean  = prova.groupby(["module", "name"])["vectime"].apply(np.mean).to_frame()
-    #values_mean = prova.groupby(["module", "name"])["vecvalue"].apply(np.mean).to_frame()
-    times_mean  = prova.groupby(["module", "name"])["vectime"].apply(np.mean).reset_index()
-    values_mean = prova.groupby(["module", "name"])["vecvalue"].apply(np.mean).reset_index()
-    #print(times_mean)
-    #print(values_mean)
-    times_mean = times_mean.merge(values_mean, on=["module", "name"])
-    print(times_mean)
+
+    # Get group sizes
+    prova_count = prova.groupby(["module", "name"]).size()
+
+    # Join the group sizes with the general data frame
+    prova = prova.merge(prova_count.to_frame("count"), left_on=["module", "name"], right_on=["module", "name"])
+    print("\n\nAdded group sizes:\n", prova)
+
+    # Get the max size of the groups
+    #max_group_size = prova["count"].max()
+    #print("\nmax_group_size:", max_group_size)
+
+    # Filter groups with less than max_group_size items and fill it with missing items
+    missing_rows=[]
+    #prova.groupby(["module", "name"]).filter(lambda x: len(x) < max_group_size).apply(fillGroup, axis=1) # Filter returns a df and not a groupbydf
+
+    #print(prova.groupby(["module", "name"]).filter(lambda x: len(x) < max_group_size)[["module", "name", "max_len", "count"]].drop_duplicates())
+    #prova.groupby(["module", "name"]).filter(lambda x: len(x) < max_group_size)[["module", "name", "max_len", "count"]].drop_duplicates().apply(fillGroup, axis=1)
+    #print(prova[prova["count"] < max_group_size][["module", "name", "max_len", "count"]].drop_duplicates())
+    prova[prova["count"] < max_group_size][["module", "name", "max_len", "count"]].drop_duplicates().apply(fillGroup, axis=1)
+    
+    # Append missing rows to the general data frame
+    prova = pd.concat([prova, pd.DataFrame(missing_rows, columns=prova.columns)])
+    print("\n\nAppended missing rows per group:\n", prova)
+
+
+    # Calculate mean or median of times and values
+    op = np.mean if compute_mean else np.median
+    times_mean  = prova.groupby(["module", "name"])["vectime"].apply(op).reset_index()
+    values_mean = prova.groupby(["module", "name"])["vecvalue"].apply(op).reset_index()
+
+    # Join the results
+    prova = times_mean.merge(values_mean, on=["module", "name"])
+    print("\n\nOperation applied (mean or median):\n", prova)
     '''
-
 
 df.apply(toCSV, axis=1)
