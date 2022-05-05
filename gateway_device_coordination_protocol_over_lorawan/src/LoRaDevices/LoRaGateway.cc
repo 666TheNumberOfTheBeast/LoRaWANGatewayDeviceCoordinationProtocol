@@ -202,7 +202,8 @@ void LoRaGateway::initialize() {
     messagesInvalidDataCount  = 0;
     messagesSentGatewaysDataCount     = 0;
     messagesReceivedGatewaysDataCount = 0;
-    messagesSentServerDataCount       = 0;
+    messagesSentServerDataCount      = 0;
+    messagesReceivedServerDataCount  = 0;
     messagesReceivedDevicesDataCount  = 0;
     interferencesDataCount         = 0;
     interferencesPossibleDataCount = 0;
@@ -654,7 +655,8 @@ void LoRaGateway::initialize() {
 
     signalSentGatewaysData     = registerSignal("sentGatewaysData");
     signalReceivedGatewaysData = registerSignal("receivedGatewaysData");
-    signalSentServerData      = registerSignal("sentServerData");
+    signalSentServerData     = registerSignal("sentServerData");
+    signalReceivedServerData = registerSignal("receivedServerData");
     signalReceivedDevicesData = registerSignal("receivedDevicesData");
 
     signalSentDataCount     = registerSignal("sentDataCount");
@@ -664,7 +666,8 @@ void LoRaGateway::initialize() {
 
     signalSentGatewaysDataCount     = registerSignal("sentGatewaysDataCount");
     signalReceivedGatewaysDataCount = registerSignal("receivedGatewaysDataCount");
-    signalSentServerDataCount      = registerSignal("sentServerDataCount");
+    signalSentServerDataCount     = registerSignal("sentServerDataCount");
+    signalReceivedServerDataCount = registerSignal("receivedServerDataCount");
     signalReceivedDevicesDataCount = registerSignal("receivedDevicesDataCount");
 
     signalInterferenceData              = registerSignal("interferenceData");
@@ -818,10 +821,19 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
                 sendMessageIp(msgOut, destAddress, true);
 
                 // Send signal for statistic collection
-                emit(signalSent, 1u);
-                emit(signalSentIp, 1u);
-                emit(signalSentCount, ++messagesSentCount);
-                emit(signalSentIpCount, ++messagesSentIpCount);
+                TCPSegment* tcpMsg = dynamic_cast<TCPSegment*>(msgOut);
+                if (tcpMsg) {
+                    if (tcpMsg->getDestPort() == MSG_PORT_PROCESSED_DATA) {
+                        emit(signalSentData, 1u);
+                        emit(signalSentDataCount, ++messagesSentDataCount);
+                    }
+                    else {
+                        emit(signalSent, 1u);
+                        emit(signalSentIp, 1u);
+                        emit(signalSentCount, ++messagesSentCount);
+                        emit(signalSentIpCount, ++messagesSentIpCount);
+                    }
+                }
             }
 
             EV << "Restart the timeout\n";
@@ -887,7 +899,11 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
                     simtime_t time = simTime() * 1000;
 
                     // Get a random delay for transmission in seconds
-                    delay = (rand() + (int) uniform(0, HELLO_GATEWAY_MAX_DELAY)) % HELLO_GATEWAY_MAX_DELAY+1;
+                    //delay = (rand() + (int) uniform(0, HELLO_GATEWAY_MAX_DELAY)) % HELLO_GATEWAY_MAX_DELAY+1;
+                    std::random_device rd {};
+                    std::mt19937 gen { rd() };
+                    std::uniform_int_distribution<> distribution(0, HELLO_GATEWAY_MAX_DELAY);
+                    delay = distribution(gen);
                     //delay = 5; // XXX: for heavy testing
 
                     // Calculate expiration time with a tolerance of 50 ms
@@ -914,6 +930,8 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
 
                     isTowardsDevices = false;
                     restartTimer = true;
+
+                    EV << "Retransmitting HELLO_GATEWAY message...\n";
 
                     break; }
                 case MSG_PORT_STATS: {
@@ -945,11 +963,12 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
                         }
                     }
 
+                    EV << "Retransmitting STATS message...\n";
+
                     break; }
                 default:
                     return;
             }
-
 
             EV << "Retransmit over LoRa\n";
 
@@ -1009,8 +1028,6 @@ void LoRaGateway::handleMessage(cMessage *msgIn) {
             // Check if the timer has to be restarted
             if (restartTimer) {
                 EV << "Restart the timeout\n";
-                //scheduleAt(simTime() + timeoutLoRa, it->first);
-                //scheduleAt(simTime() + HELLO_GATEWAY_MAX_DELAY, it->first);
             }
             else {
                 EV << "Cancel the timeout\n";
@@ -1563,6 +1580,27 @@ void LoRaGateway::processMessageFromTransportLayer(cMessage* msgIn) {
             printError(error);
 
             // Send signal for statistic collection
+            cPacket* ipMsg = dynamic_cast<cPacket*>(msgIn)->getEncapsulatedPacket();
+            if (ipMsg) {
+                cPacket* encMsg = ipMsg->getEncapsulatedPacket();
+                if (encMsg) {
+                    LoRaPhysicalFrame* phyMsg = dynamic_cast<LoRaPhysicalFrame*>(encMsg);
+                    if (phyMsg) {
+                        LoRaDatalinkFrame* dlMsg = dynamic_cast<LoRaDatalinkFrame*>(phyMsg->getEncapsulatedPacket());
+                        if (dlMsg) {
+                            LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->getEncapsulatedPacket());
+                            if (appMsg && appMsg->getPort() == MSG_PORT_DATA) {
+                                emit(signalInvalidData, 1u);
+                                emit(signalInvalidDataCount, ++messagesInvalidDataCount);
+
+                                delete msgIn;
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+
             emit(signalInvalid, 1u);
             emit(signalInvalidCount, ++messagesInvalidCount);
             emit(signalInvalidIp, 1u);
@@ -1581,6 +1619,27 @@ void LoRaGateway::processMessageFromTransportLayer(cMessage* msgIn) {
             printError(error);
 
             // Send signal for statistic collection
+            cPacket* ipMsg = dynamic_cast<cPacket*>(msgIn)->getEncapsulatedPacket();
+            if (ipMsg) {
+                cPacket* encMsg = ipMsg->getEncapsulatedPacket();
+                if (encMsg) {
+                    LoRaPhysicalFrame* phyMsg = dynamic_cast<LoRaPhysicalFrame*>(encMsg);
+                    if (phyMsg) {
+                        LoRaDatalinkFrame* dlMsg = dynamic_cast<LoRaDatalinkFrame*>(phyMsg->getEncapsulatedPacket());
+                        if (dlMsg) {
+                            LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->getEncapsulatedPacket());
+                            if (appMsg && appMsg->getPort() == MSG_PORT_DATA) {
+                                emit(signalInvalidData, 1u);
+                                emit(signalInvalidDataCount, ++messagesInvalidDataCount);
+
+                                delete msgIn;
+                                return;
+                            }
+                        }
+                    }
+                }
+            }
+
             emit(signalInvalid, 1u);
             emit(signalInvalidCount, ++messagesInvalidCount);
             emit(signalInvalidIp, 1u);
@@ -1612,6 +1671,24 @@ void LoRaGateway::processMessageFromTransportLayer(cMessage* msgIn) {
         printError(error);
 
         // Send signal for statistic collection
+        cPacket* encMsg = ipMsg->getEncapsulatedPacket();
+        if (encMsg) {
+            LoRaPhysicalFrame* phyMsg = dynamic_cast<LoRaPhysicalFrame*>(encMsg);
+            if (phyMsg) {
+                LoRaDatalinkFrame* dlMsg = dynamic_cast<LoRaDatalinkFrame*>(phyMsg->getEncapsulatedPacket());
+                if (dlMsg) {
+                    LoRaAppUplinkFrame* appMsg = dynamic_cast<LoRaAppUplinkFrame*>(dlMsg->getEncapsulatedPacket());
+                    if (appMsg && appMsg->getPort() == MSG_PORT_DATA) {
+                        emit(signalInvalidData, 1u);
+                        emit(signalInvalidDataCount, ++messagesInvalidDataCount);
+
+                        delete msgIn;
+                        return;
+                    }
+                }
+            }
+        }
+
         emit(signalInvalid, 1u);
         emit(signalInvalidCount, ++messagesInvalidCount);
         emit(signalInvalidIp, 1u);
@@ -1697,21 +1774,17 @@ void LoRaGateway::processMessageFromTransportLayer(cMessage* msgIn) {
         // Check if the message has no payload
         if (!memcmp(msgIn->getName(), "tcpACKMsg", strlen("tcpACKMsg"))) {
             // Send signal for statistic collection
-            emit(signalReceived, 1u);
-            emit(signalReceivedIp, 1u);
-            emit(signalReceivedCount, ++messagesReceivedCount);
-            emit(signalReceivedIpCount, ++messagesReceivedIpCount);
-
-            // Send signal for statistic collection
             TCPSegment* tcpMsg = dynamic_cast<TCPSegment*>(msgIn);
-            if (tcpMsg){
+            if (tcpMsg) {
                 uint16_t port = tcpMsg->getSrcPort();
 
                 if (port == MSG_PORT_PROCESSED_DATA) {
+                    emit(signalReceivedData, 1u);
+                    emit(signalReceivedDataCount, ++messagesReceivedDataCount);
+
                     if (srcAddress == networkServerAddress) {
-                        //emit(signalReceivedServerData, 1u);
-                        //emit(signalReceivedServerDataCount, ++messagesReceivedServerDataCount);
-                        ;
+                        emit(signalReceivedServerData, 1u);
+                        emit(signalReceivedServerDataCount, ++messagesReceivedServerDataCount);
                     }
                     else {
                         emit(signalReceivedGatewaysData, 1u);
@@ -1719,6 +1792,11 @@ void LoRaGateway::processMessageFromTransportLayer(cMessage* msgIn) {
                     }
                 }
                 else {
+                    emit(signalReceived, 1u);
+                    emit(signalReceivedIp, 1u);
+                    emit(signalReceivedCount, ++messagesReceivedCount);
+                    emit(signalReceivedIpCount, ++messagesReceivedIpCount);
+
                     if (srcAddress == networkServerAddress) {
                         emit(signalReceivedIpServer, 1u);
                         emit(signalReceivedIpServerCount, ++messagesReceivedIpServerCount);
@@ -1764,27 +1842,47 @@ void LoRaGateway::processMessageFromTransportLayer(cMessage* msgIn) {
         // Do not schedule retransmission as it is an ACK
 
         // Send signal for statistic collection
-        emit(signalSent, 1u);
-        emit(signalSentIp, 1u);
-        emit(signalSentCount, ++messagesSentCount);
-        emit(signalSentIpCount, ++messagesSentIpCount);
+        TCPSegment* tcpMsg = dynamic_cast<TCPSegment*>(msgIn);
+        if (tcpMsg) {
+            uint16_t port = tcpMsg->getSrcPort();
 
-        if (srcAddress == networkServerAddress) {
-            emit(signalSentIpServer, 1u);
-            emit(signalSentIpServerCount, ++messagesSentIpServerCount);
-        }
-        else {
-            emit(signalSentIpGateways, 1u);
-            emit(signalSentIpGatewaysCount, ++messagesSentIpGatewaysCount);
+            if (port == MSG_PORT_PROCESSED_DATA) {
+                emit(signalSentData, 1u);
+                emit(signalSentDataCount, ++messagesSentDataCount);
+
+                if (srcAddress == networkServerAddress) {
+                    emit(signalSentServerData, 1u);
+                    emit(signalSentServerDataCount, ++messagesSentServerDataCount);
+                }
+                else {
+                    emit(signalSentGatewaysData, 1u);
+                    emit(signalSentGatewaysDataCount, ++messagesSentGatewaysDataCount);
+                }
+            }
+            else {
+                emit(signalSent, 1u);
+                emit(signalSentIp, 1u);
+                emit(signalSentCount, ++messagesSentCount);
+                emit(signalSentIpCount, ++messagesSentIpCount);
+
+                if (srcAddress == networkServerAddress) {
+                    emit(signalSentIpServer, 1u);
+                    emit(signalSentIpServerCount, ++messagesSentIpServerCount);
+                }
+                else {
+                    emit(signalSentIpGateways, 1u);
+                    emit(signalSentIpGatewaysCount, ++messagesSentIpGatewaysCount);
+                }
+            }
         }
 
         networkOut += MESSAGE_SIZE_IPV4_HEADER + MESSAGE_SIZE_TCP_HEADER;
     }
 
-    cPacket* dlMsg = ipMsg->decapsulate();
+    cPacket* encMsg = ipMsg->decapsulate();
 
     // Check if the packet has an encapsulated message
-    if (!dlMsg) {
+    if (!encMsg) {
         // The IP packet has not an encapsulated message.
 
         // Send signal for statistic collection
@@ -1982,7 +2080,7 @@ void LoRaGateway::processMessageFromTransportLayer(cMessage* msgIn) {
 
     // The IP packet has an encapsulated message
     delete msgIn;
-    processMessageFromLoRaLayer(dlMsg, srcAddress);
+    processMessageFromLoRaLayer(encMsg, srcAddress);
 }
 
 void LoRaGateway::processMessageFromLoRaLayer(
@@ -2005,18 +2103,18 @@ void LoRaGateway::processMessageFromLoRaLayer(
         //EV << "The message is not a valid LoRa frame!\n";
         printError(error);
 
-        // Send signal for statistic collection
-        emit(signalInvalid, 1u);
-        emit(signalInvalidCount, ++messagesInvalidCount);
-
         // Check if the message is received via LoRa
         if (srcAddress == std::array<uint8_t, IPv4_ADDRESS_SIZE> {0,0,0,0}) {
             // Send signal for statistic collection
+            emit(signalInvalid, 1u);
+            emit(signalInvalidCount, ++messagesInvalidCount);
             emit(signalInvalidLoRa, 1u);
             emit(signalInvalidLoRaCount, ++messagesInvalidLoRaCount);
         }
         else if (srcAddress == networkServerAddress) {
             // Send signal for statistic collection
+            emit(signalInvalid, 1u);
+            emit(signalInvalidCount, ++messagesInvalidCount);
             //emit(signalInvalidIpServer, 1u);
             //emit(signalInvalidIpServerCount, ++messagesInvalidIpServerCount);
             emit(signalInvalidIp, 1u);
@@ -2029,6 +2127,8 @@ void LoRaGateway::processMessageFromLoRaLayer(
                 emit(signalInvalidDataCount, ++messagesInvalidDataCount);
             }
             else {
+                emit(signalInvalid, 1u);
+                emit(signalInvalidCount, ++messagesInvalidCount);
                 //emit(signalInvalidIpGateways, 1u);
                 //emit(signalInvalidIpGatewaysCount, ++messagesInvalidIpGatewaysCount);
                 emit(signalInvalidIp, 1u);
@@ -2114,24 +2214,28 @@ void LoRaGateway::processMessageFromLoRaLayer(
         }
     }
     else {
-        // Send signal for statistic collection
-        emit(signalReceived, 1u);
-        emit(signalReceivedIp, 1u);
-        emit(signalReceivedCount, ++messagesReceivedCount);
-        emit(signalReceivedIpCount, ++messagesReceivedIpCount);
-
         if (srcAddress == networkServerAddress) {
             // Send signal for statistic collection
+            emit(signalReceived, 1u);
+            emit(signalReceivedIp, 1u);
+            emit(signalReceivedCount, ++messagesReceivedCount);
+            emit(signalReceivedIpCount, ++messagesReceivedIpCount);
             emit(signalReceivedIpServer, 1u);
             emit(signalReceivedIpServerCount, ++messagesReceivedIpServerCount);
         }
         else {
             // Send signal for statistic collection
             if (port == MSG_PORT_DATA) {
+                emit(signalReceivedData, 1u);
                 emit(signalReceivedGatewaysData, 1u);
+                emit(signalReceivedDataCount, ++messagesReceivedDataCount);
                 emit(signalReceivedGatewaysDataCount, ++messagesReceivedGatewaysDataCount);
             }
             else {
+                emit(signalReceived, 1u);
+                emit(signalReceivedIp, 1u);
+                emit(signalReceivedCount, ++messagesReceivedCount);
+                emit(signalReceivedIpCount, ++messagesReceivedIpCount);
                 emit(signalReceivedIpGateways, 1u);
                 emit(signalReceivedIpGatewaysCount, ++messagesReceivedIpGatewaysCount);
             }
@@ -4224,7 +4328,6 @@ void LoRaGateway::processMessageFromLoRaLayer(
 
             // Forward the message to selected gateway
             forwardMessageIp(msgIn, "forwardDataMsg",
-                    //std::get<6>(tuple), MSG_PORT_FORWARD_PAIRING_REQUEST);
                     std::get<6>(tuple), MSG_PORT_FORWARD_OVER_IP, false);
 
             // Send signal for statistic collection
@@ -4461,7 +4564,11 @@ void LoRaGateway::sendMessageHelloGateway(
     simtime_t time = simTime() * 1000;
 
     // Get a random delay for transmission in seconds
-    double delay = (rand() + (int) uniform(0, HELLO_GATEWAY_MAX_DELAY)) % HELLO_GATEWAY_MAX_DELAY+1;
+    //double delay = (rand() + (int) uniform(0, HELLO_GATEWAY_MAX_DELAY)) % HELLO_GATEWAY_MAX_DELAY+1;
+    std::random_device rd {};
+    std::mt19937 gen { rd() };
+    std::uniform_int_distribution<> distribution(0, HELLO_GATEWAY_MAX_DELAY);
+    double delay = distribution(gen);
     //double delay = 5; // XXX: for heavy testing
 
     // Calculate expiration time with a tolerance of 50 ms
@@ -4841,9 +4948,9 @@ void LoRaGateway::sendMessageIp(
                     sendSignalSentIp(false, destAddress);
             }
             else {
-                LoRaJoinRequestFrame* joinMsg = dynamic_cast<LoRaJoinRequestFrame*>(dlMsg->getEncapsulatedPacket());
-                if (!joinMsg)
-                    return;
+                //LoRaJoinRequestFrame* joinMsg = dynamic_cast<LoRaJoinRequestFrame*>(dlMsg->getEncapsulatedPacket());
+                //if (!joinMsg)
+                //    return;
 
                 sendSignalSentIp(false, destAddress);
             }
@@ -4851,8 +4958,16 @@ void LoRaGateway::sendMessageIp(
         else
             sendSignalSentIp(false, destAddress);
     }
-    else
-        sendSignalSentIp(false, destAddress);
+    else {
+        TCPSegment* tcpMsg = dynamic_cast<TCPSegment*>(msg);
+        if (!tcpMsg)
+            return;
+
+        if (tcpMsg->getDestPort() == MSG_PORT_PROCESSED_DATA)
+            sendSignalSentIp(true, destAddress);
+        else
+            sendSignalSentIp(false, destAddress);
+    }
 
 
     // In OMNeT++ the gateway does not know which is the gate index associated to the IP address.
@@ -5050,8 +5165,15 @@ void LoRaGateway::sendMessageLoRa(
         // For a retransmission attempt towards end devices,
         // await this roughly identical moment in the future (TX_DELAY + airtimeFrame) and apply the delay.
         // For a retransmission attempt towards gateways,
-        isTowardsDevices ? scheduleAt(simTime() + TX_DELAY + airtimeFrame + delay, eventTimeout) :
-                           scheduleAt(simTime() + HELLO_GATEWAY_MAX_DELAY, eventTimeout);
+        // await the end of the interval to choose a new random delay
+        if (isTowardsDevices) {
+            // Set a minimum delay
+            if (delay < 0.5)
+                delay = 0.5;
+            scheduleAt(simTime() + TX_DELAY + airtimeFrame + delay, eventTimeout);
+        }
+        else
+           scheduleAt(simTime() + HELLO_GATEWAY_MAX_DELAY, eventTimeout);
 
 
     EV << "Notify neighbors\n";
@@ -5066,6 +5188,8 @@ void LoRaGateway::sendMessageLoRa(
     // To apply multiple interference to a message use the ID that is shared among duplicates available to neighbors
     // instead of the pointer that is related to the particular duplicate
     verifyTransmissionInterference(msg, sendingTime, isTowardsDevices);
+
+    // TODO: all stats should be sent after any delay to represent the actual sending time
 
     // Send signal for statistic collection
     //emit(signalSent, 1u);

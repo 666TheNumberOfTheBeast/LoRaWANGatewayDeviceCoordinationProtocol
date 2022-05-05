@@ -135,6 +135,9 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     unsigned long interferencesCount;
     unsigned long interferencesPossibleCount;
 
+    // Data
+    unsigned long messagesOutData;
+
     // Position of the device for creating communication channels only with gateways in the radio range
     unsigned posX;
     unsigned posY;
@@ -222,6 +225,10 @@ class LoRaEndDevice : public cSimpleModule/*, public cListener*/ {
     simsignal_t signalInterferencePossible;
     simsignal_t signalInterferenceCount;
     simsignal_t signalInterferencePossibleCount;
+
+    // Data
+    simsignal_t signalSentData;
+    simsignal_t signalSentDataCount;
     // ============ CLASS SIGNALS ==============
 
   protected:

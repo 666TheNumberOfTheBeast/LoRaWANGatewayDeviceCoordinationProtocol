@@ -172,6 +172,8 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
     unsigned long messagesReceivedGatewaysDataCount;
 
     unsigned long messagesSentServerDataCount;
+    unsigned long messagesReceivedServerDataCount;
+
     unsigned long messagesReceivedDevicesDataCount;
 
     unsigned long interferencesDataCount;
@@ -382,6 +384,8 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
     simsignal_t signalReceivedGatewaysData;
 
     simsignal_t signalSentServerData;
+    simsignal_t signalReceivedServerData;
+
     simsignal_t signalReceivedDevicesData;
 
     simsignal_t signalSentDataCount;
@@ -393,6 +397,8 @@ class LoRaGateway : public cSimpleModule/*, public cListener*/ {
     simsignal_t signalReceivedGatewaysDataCount;
 
     simsignal_t signalSentServerDataCount;
+    simsignal_t signalReceivedServerDataCount;
+
     simsignal_t signalReceivedDevicesDataCount;
 
     simsignal_t signalInterferenceData;

@@ -150,7 +150,7 @@ const uint8_t MSG_LOSS_PROBABILITY    = 10; // 10%
 const uint8_t MSG_LOSS_PROBABILITY_IP = 1; // 1%
 
 // For calculating RSSI
-const float PATH_LOSS_EXP  = 2.4; // FOR RANDOM SCENARIO
+//const float PATH_LOSS_EXP  = 2.4; // FOR RANDOM SCENARIO
 //const int MEASURED_POWER   = -30;
 //const float PATH_LOSS_EXP  = 4;
 //const int MEASURED_POWER   = -60;
@@ -158,7 +158,7 @@ const float PATH_LOSS_EXP  = 2.4; // FOR RANDOM SCENARIO
 //const float PATH_LOSS_EXP  = 2.87; // FOR REAL SCENARIO 20190301
 //const float PATH_LOSS_EXP  = 5; // FOR REAL SCENARIO 20200501
 //const float PATH_LOSS_EXP  = 4.7; // FOR REAL SCENARIO 20200801
-//const float PATH_LOSS_EXP  = 4.9; // FOR REAL SCENARIO 20200804
+const float PATH_LOSS_EXP  = 4.9; // FOR REAL SCENARIO 20200804, 20200806
 //const float PATH_LOSS_EXP  = 4.5; // FOR REAL SCENARIO 20200506
 const int MEASURED_POWER   = -30;
 

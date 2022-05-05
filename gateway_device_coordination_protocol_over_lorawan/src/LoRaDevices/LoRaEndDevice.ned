@@ -35,6 +35,9 @@ simple LoRaEndDevice
         @signal[interferenceCount](type="unsigned long");
         @signal[interferencePossibleCount](type="unsigned long");
         
+        @signal[sentData](type="unsigned long");
+        @signal[sentDataCount](type="unsigned long");
+        
         @statistic[messageSent](title="messages sent"; source="sent"; record=histogram,vector; interpolationmode=none);
         @statistic[messageReceived](title="messages received"; source="received"; record=histogram,vector; interpolationmode=none);
         @statistic[messageLost](title="messages lost"; source="lost"; record=histogram,vector; interpolationmode=none);
@@ -51,6 +54,9 @@ simple LoRaEndDevice
         @statistic[interferencePossible](title="interferences possible"; source="interferencePossible"; record=histogram,vector; interpolationmode=none);
         @statistic[interferenceCount](title="interferences count"; source="interferenceCount"; record=histogram,vector; interpolationmode=none);
         @statistic[interferencePossibleCount](title="interference possible count"; source="interferencePossibleCount"; record=histogram,vector; interpolationmode=none);
+        
+        @statistic[messageSentData](title="messages sent data"; source="sentData"; record=histogram,vector; interpolationmode=none);
+        @statistic[messageSentDataCount](title="messages sent data count"; source="sentDataCount"; record=histogram,vector; interpolationmode=none);
         
         //@signal[endDevice-*];
         

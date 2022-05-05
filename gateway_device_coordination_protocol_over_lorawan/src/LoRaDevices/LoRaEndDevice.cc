@@ -166,6 +166,8 @@ void LoRaEndDevice::initialize() {
     interferencesCount         = 0;
     interferencesPossibleCount = 0;
 
+    messagesOutData = 0;
+
 
     cModule* parent = getParentModule();
     realDeployment = parent->par("realDeployment").boolValue();
@@ -721,6 +723,9 @@ void LoRaEndDevice::initialize() {
     signalInterferencePossible      = registerSignal("interferencePossible");
     signalInterferenceCount         = registerSignal("interferenceCount");
     signalInterferencePossibleCount = registerSignal("interferencePossibleCount");
+
+    signalSentData      = registerSignal("sentData");
+    signalSentDataCount = registerSignal("sentDataCount");
 
 
     // The 'ev' object works like 'cout' in C++
@@ -1510,6 +1515,8 @@ void LoRaEndDevice::handleMessage(cMessage *msgIn) {
             // Send signal for statistic collection
             //emit(signalSent, 1u);
             //emit(signalSentCount, ++messagesOut);
+            emit(signalSentData, 1u);
+            emit(signalSentDataCount, ++messagesOutData);
 
             // Schedule receive windows where start times are defined using the end of the transmission as a reference
             EV << "Starting timeouts for opening the receive windows...\n";

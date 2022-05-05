@@ -97,6 +97,8 @@ simple LoRaGateway
         @signal[receivedGatewaysData](type="unsigned long");
         
         @signal[sentServerData](type="unsigned long");
+        @signal[receivedServerData](type="unsigned long");
+        
         @signal[receivedDevicesData](type="unsigned long");
 
         @signal[sentDataCount](type="unsigned long");
@@ -108,6 +110,8 @@ simple LoRaGateway
         @signal[receivedGatewaysDataCount](type="unsigned long");
         
         @signal[sentServerDataCount](type="unsigned long");
+        @signal[receivedServerDataCount](type="unsigned long");
+        
         @signal[receivedDevicesDataCount](type="unsigned long");
         
         @signal[interferenceData](type="unsigned long");
@@ -203,6 +207,7 @@ simple LoRaGateway
         @statistic[messageSentGatewaysData](title="messages gateways data sent"; source="sentGatewaysData"; record=histogram,vector; interpolationmode=none);
         @statistic[messageReceivedGatewaysData](title="messages gateways data received"; source="receivedGatewaysData"; record=histogram,vector; interpolationmode=none);
         @statistic[messageSentServerData](title="messages server data sent"; source="sentServerData"; record=histogram,vector; interpolationmode=none);
+        @statistic[messageReceivedServerData](title="messages server data received"; source="receivedServerData"; record=histogram,vector; interpolationmode=none);
         @statistic[messageReceivedDevicesData](title="messages devices data received"; source="receivedDevicesData"; record=histogram,vector; interpolationmode=none);
         
         @statistic[messageSentDataCount](title="messages sent data count"; source="sentDataCount"; record=histogram,vector; interpolationmode=none);
@@ -213,6 +218,7 @@ simple LoRaGateway
         @statistic[messageSentGatewaysDataCount](title="messages gateways sent data count"; source="sentGatewaysDataCount"; record=histogram,vector; interpolationmode=none);
         @statistic[messageReceivedGatewaysDataCount](title="messages gateways received data count"; source="receivedGatewaysDataCount"; record=histogram,vector; interpolationmode=none);
         @statistic[messageSentServerDataCount](title="messages server sent data count"; source="sentServerDataCount"; record=histogram,vector; interpolationmode=none);
+        @statistic[messageReceivedServerDataCount](title="messages server received data count"; source="receivedServerDataCount"; record=histogram,vector; interpolationmode=none);
         @statistic[messageReceivedDevicesDataCount](title="messages devices received data count"; source="receivedDevicesDataCount"; record=histogram,vector; interpolationmode=none);
         
         @statistic[interferenceData](title="interferences data"; source="interferenceData"; record=histogram,vector; interpolationmode=none);
