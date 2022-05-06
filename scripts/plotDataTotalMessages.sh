@@ -149,8 +149,6 @@ python3 plotData.py Sent,\ Received\ and\ Lost\ gateway\ messages b -I -o $out_d
 python3 plotData.py Sent,\ Received\ and\ Lost\ gateway\ messages b -I -o $out_directory/messagesSentReceivedAndLostIpGatewaysBar.pdf -l sent\ IP received\ IP lost\ IP -g gateways -i ${stats_directory}messageSentGatewaysIpCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysIpCount${2}_${3}.csv ${stats_directory}messageLostGatewaysIpCount${2}_${3}.csv &
 
 
-
-
 # Total number of sent, received and lost uplinks
 python3 plotData.py Sent,\ Received\ and\ Lost\ uplinks\ \(sum\) s -I -o $out_directory/messagesSentReceivedAndLostUplinksCountScattered.pdf -l sent received lost -i ${stats_directory}messageSentDevicesCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDevicesCount${2}_${3}.csv ${stats_directory}messageLostGatewaysLoRaDevicesCount${2}_${3}.csv &
 python3 plotData.py Sent,\ Received\ and\ Lost\ uplinks\ \(sum\) l -I -o $out_directory/messagesSentReceivedAndLostUplinksCountLine.pdf -l sent received lost -i ${stats_directory}messageSentDevicesCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDevicesCount${2}_${3}.csv ${stats_directory}messageLostGatewaysLoRaDevicesCount${2}_${3}.csv &
@@ -181,6 +179,61 @@ python3 plotData.py Sent,\ Received\ and\ Lost\ IP\ gateway\ messages\ \(sum\) l
 
 python3 plotData.py Sent,\ Received\ and\ Lost\ IP\ gateway\ messages b -I -o $out_directory/messagesSentReceivedAndLostIpGatewaysForServerBar.pdf -l sent received lost -g IP\ messages\ to\ server -i ${stats_directory}messageSentGatewaysIpServerCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysIpServerCount${2}_${3}.csv ${stats_directory}messageLostGatewaysIpServerCount${2}_${3}.csv &
 
+
+# Wait parallel executions end
+wait
+
+#printf "\nAll charts are plotted. Bye :)\n"
+
+
+#++++++++++++++++++++++++++++++ DATA ++++++++++++++++++++++++++++++
+python3 mergeCSV.py -r -I -o ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv -i $(getAllFiles "_messageSentData.csv" $2 true) &
+python3 mergeCSV.py -r -I -o ${stats_directory}messageSentGatewaysDataCount${2}_${3}.csv -i $(getAllFiles "_messageSentData.csv" $3 false) &
+python3 mergeCSV.py -r -I -o ${stats_directory}messageSentGatewaysIpGatewaysDataCount${2}_${3}.csv -i $(getAllFiles "_messageSentGatewaysData.csv" $3 false) &
+python3 mergeCSV.py -r -I -o ${stats_directory}messageSentGatewaysIpServerDataCount${2}_${3}.csv -i $(getAllFiles "_messageSentServerData.csv" $3 false) &
+
+python3 mergeCSV.py -r -I -o ${stats_directory}messageReceivedGatewaysDataCount${2}_${3}.csv -i $(getAllFiles "_messageReceivedData.csv" $3 false) &
+python3 mergeCSV.py -r -I -o ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv -i $(getAllFiles "_messageReceivedDevicesData.csv" $3 false) &
+python3 mergeCSV.py -r -I -o ${stats_directory}messageReceivedGatewaysIpGatewaysDataCount${2}_${3}.csv -i $(getAllFiles "_messageReceivedGatewaysData.csv" $3 false) &
+python3 mergeCSV.py -r -I -o ${stats_directory}messageReceivedGatewaysIpServerDataCount${2}_${3}.csv -i $(getAllFiles "_messageReceivedServerData.csv" $3 false) &
+
+python3 mergeCSV.py -r -I -o ${stats_directory}messageLostGatewaysDataCount${2}_${3}.csv -i $(getAllFiles "_messageLostData.csv" $3 false) &
+
+
+#==== STATS ABOUT TOTAL NUMBER OF MESSAGES ====
+out_directory="${stats_directory}total_messages/"
+printf "\nPlotting data into $out_directory\n"
+
+
+# Total number of sent messages by devices
+#python3 plotData.py Sent\ device\ data\ messages\ \(sum\) s -I -o $out_directory/messagesSentDevicesDataCountScattered.pdf -l sent -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv &
+#python3 plotData.py Sent\ device\ data\ messages\ \(sum\) l -I -o $out_directory/messagesSentDevicesDataCountLine.pdf -l sent -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv &
+
+#python3 plotData.py Sent\ device\ data\ messages b -I -o $out_directory/messagesSentDevicesDataBar.pdf -l sent -g devices -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv &
+
+
+# Total number of sent, received and lost messages by gateways
+python3 plotData.py Sent,\ Received\ and\ Lost\ gateway\ data\ messages\ \(sum\) s -I -o $out_directory/messagesSentReceivedAndLostGatewaysDataCountScattered.pdf -l sent received lost -i ${stats_directory}messageSentGatewaysDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysDataCount${2}_${3}.csv ${stats_directory}messageLostGatewaysDataCount${2}_${3}.csv &
+python3 plotData.py Sent,\ Received\ and\ Lost\ gateway\ data\ messages\ \(sum\) l -I -o $out_directory/messagesSentReceivedAndLostGatewaysDataCountLine.pdf -l sent received lost -i ${stats_directory}messageSentGatewaysDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysDataCount${2}_${3}.csv ${stats_directory}messageLostGatewaysDataCount${2}_${3}.csv &
+
+python3 plotData.py Sent\ and\ Received\ gateway\ data\ messages\ \(sum\) s -I -o $out_directory/messagesSentAndReceivedIpGatewaysForGatewaysDataCountScattered.pdf -l sent\ IP received\ IP -i ${stats_directory}messageSentGatewaysIpGatewaysDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysIpGatewaysDataCount${2}_${3}.csv &
+python3 plotData.py Sent\ and\ Received\ gateway\ data\ messages\ \(sum\) l -I -o $out_directory/messagesSentAndReceivedIpGatewaysForGatewaysDataCountLine.pdf -l sent\ IP received\ IP -i ${stats_directory}messageSentGatewaysIpGatewaysDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysIpGatewaysDataCount${2}_${3}.csv &
+
+python3 plotData.py Sent\ and\ Received\ gateway\ data\ messages\ \(sum\) s -I -o $out_directory/messagesSentAndReceivedIpGatewaysForServerDataCountScattered.pdf -l sent\ IP received\ IP -i ${stats_directory}messageSentGatewaysIpServerDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysIpServerDataCount${2}_${3}.csv &
+python3 plotData.py Sent\ and\ Received\ gateway\ data\ messages\ \(sum\) l -I -o $out_directory/messagesSentAndReceivedIpGatewaysForServerDataCountLine.pdf -l sent\ IP received\ IP -i ${stats_directory}messageSentGatewaysIpServerDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysIpServerDataCount${2}_${3}.csv &
+
+python3 plotData.py Sent,\ Received\ and\ Lost\ gateway\ data\ messages b -I -o $out_directory/messagesSentReceivedAndLostGatewaysDataBar.pdf -l sent received lost -g gateways -i ${stats_directory}messageSentGatewaysDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysDataCount${2}_${3}.csv ${stats_directory}messageLostGatewaysDataCount${2}_${3}.csv &
+python3 plotData.py Sent\ and\ Received\ gateway\ data\ messages b -I -o $out_directory/messagesSentAndReceivedIpGatewaysForGatewaysDataBar.pdf -l sent received -g IP\ messages\ to\ gateways -i ${stats_directory}messageSentGatewaysIpGatewaysDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysIpGatewaysDataCount${2}_${3}.csv &
+python3 plotData.py Sent\ and\ Received\ gateway\ data\ messages b -I -o $out_directory/messagesSentAndReceivedIpGatewaysForServerDataBar.pdf -l sent received -g IP\ messages\ to\ server -i ${stats_directory}messageSentGatewaysIpServerDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysIpServerDataCount${2}_${3}.csv &
+
+
+# Total number of sent, received and lost uplinks
+python3 plotData.py Sent\ and\ Received\ uplinks\ \(sum\) s -I -o $out_directory/messagesSentAndReceivedUplinksCountScattered.pdf -l sent received -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv &
+python3 plotData.py Sent\ and\ Received\ uplinks\ \(sum\) l -I -o $out_directory/messagesSentAndReceivedUplinksCountLine.pdf -l sent received -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv &
+
+python3 plotData.py Sent\ and\ Received\ uplinks b -I -o $out_directory/messagesSentAndReceivedUplinksBar.pdf -l sent received -g uplinks -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv &
+#==============================================
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
 # Wait parallel executions end
 wait

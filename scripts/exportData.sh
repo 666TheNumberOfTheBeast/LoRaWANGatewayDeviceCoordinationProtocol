@@ -69,27 +69,40 @@ python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[3]_messageInCount.csv 
 python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[4]_messageInCount.csv -i ${stats_directory}endDevices[4]_messageReceivedCount.csv ${stats_directory}endDevices[4]_messageLostCount.csv ${stats_directory}endDevices[4]_messageInvalidCount.csv &
 '
 
-# Create csv file merging received, lost and invalid messages to obtain IN messages ignoring missing files (here lost messages)
+# Create csv file merging received, lost and invalid messages to obtain IN messages ignoring missing files (here lost and invalid messages)
 python3 mergeCSV.py -r -I -o ${stats_directory}gateways[0]_messageInCount.csv -i ${stats_directory}gateways[0]_messageReceived.csv ${stats_directory}gateways[0]_messageLost.csv ${stats_directory}gateways[0]_messageInvalid.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}gateways[0]_messageInLoRaCount.csv -i ${stats_directory}gateways[0]_messageReceivedLoRa.csv ${stats_directory}gateways[0]_messageLostLoRa.csv ${stats_directory}gateways[0]_messageInvalidLoRa.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}gateways[0]_messageInIpCount.csv -i ${stats_directory}gateways[0]_messageReceivedIp.csv ${stats_directory}gateways[0]_messageLostIp.csv ${stats_directory}gateways[0]_messageInvalidIp.csv &
 
-# Create csv file merging received, lost and invalid  messages to obtain IN messages ignoring missing files (here lost messages)
+# Create csv file merging received, lost and invalid messages to obtain IN messages ignoring missing files (here lost and invalid messages)
 python3 mergeCSV.py -r -I -o ${stats_directory}gateways[1]_messageInCount.csv -i ${stats_directory}gateways[1]_messageReceived.csv ${stats_directory}gateways[1]_messageLost.csv ${stats_directory}gateways[1]_messageInvalid.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}gateways[1]_messageInLoRaCount.csv -i ${stats_directory}gateways[1]_messageReceivedLoRa.csv ${stats_directory}gateways[1]_messageLostLoRa.csv ${stats_directory}gateways[1]_messageInvalidLoRa.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}gateways[1]_messageInIpCount.csv -i ${stats_directory}gateways[1]_messageReceivedIp.csv ${stats_directory}gateways[1]_messageLostIp.csv ${stats_directory}gateways[0]_messageInvalidIp.csv &
 
-# Create csv file merging received, lost and invalid  messages to obtain IN messages ignoring missing files (here lost messages)
+# Create csv file merging received, lost and invalid messages to obtain IN messages ignoring missing files (here lost and invalid messages)
 python3 mergeCSV.py -r -I -o ${stats_directory}gateways[2]_messageInCount.csv -i ${stats_directory}gateways[2]_messageReceived.csv ${stats_directory}gateways[2]_messageLost.csv ${stats_directory}gateways[2]_messageInvalid.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}gateways[2]_messageInLoRaCount.csv -i ${stats_directory}gateways[2]_messageReceivedLoRa.csv ${stats_directory}gateways[2]_messageLostLoRa.csv ${stats_directory}gateways[2]_messageInvalidLoRa.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}gateways[2]_messageInIpCount.csv -i ${stats_directory}gateways[2]_messageReceivedIp.csv ${stats_directory}gateways[2]_messageLostIp.csv ${stats_directory}gateways[0]_messageInvalidIp.csv &
 
-# Create csv file merging received, lost and invalid  messages to obtain IN messages ignoring missing files (here lost messages)
+# Create csv file merging received, lost and invalid messages to obtain IN messages ignoring missing files (here lost and invalid messages)
 python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[0]_messageInCount.csv -i ${stats_directory}endDevices[0]_messageReceived.csv ${stats_directory}endDevices[0]_messageLost.csv ${stats_directory}endDevices[0]_messageInvalid.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[1]_messageInCount.csv -i ${stats_directory}endDevices[1]_messageReceived.csv ${stats_directory}endDevices[1]_messageLost.csv ${stats_directory}endDevices[1]_messageInvalid.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[2]_messageInCount.csv -i ${stats_directory}endDevices[2]_messageReceived.csv ${stats_directory}endDevices[2]_messageLost.csv ${stats_directory}endDevices[2]_messageInvalid.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[3]_messageInCount.csv -i ${stats_directory}endDevices[3]_messageReceived.csv ${stats_directory}endDevices[3]_messageLost.csv ${stats_directory}endDevices[3]_messageInvalid.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[4]_messageInCount.csv -i ${stats_directory}endDevices[4]_messageReceived.csv ${stats_directory}endDevices[4]_messageLost.csv ${stats_directory}endDevices[4]_messageInvalid.csv &
+
+
+#++++++++++++++++++++++++++++++ DATA ++++++++++++++++++++++++++++++
+# Create csv file merging received, lost and invalid data messages to obtain IN data messages ignoring missing files (here lost and invalid messages)
+python3 mergeCSV.py -r -I -o ${stats_directory}gateways[0]_messageInDataCount.csv -i ${stats_directory}gateways[0]_messageReceivedData.csv ${stats_directory}gateways[0]_messageLostData.csv ${stats_directory}gateways[0]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}gateways[1]_messageInDataCount.csv -i ${stats_directory}gateways[1]_messageReceivedData.csv ${stats_directory}gateways[1]_messageLostData.csv ${stats_directory}gateways[1]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[0]_messageInDataCount.csv -i ${stats_directory}endDevices[0]_messageReceivedData.csv ${stats_directory}endDevices[0]_messageLostData.csv ${stats_directory}endDevices[0]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[1]_messageInDataCount.csv -i ${stats_directory}endDevices[1]_messageReceivedData.csv ${stats_directory}endDevices[1]_messageLostData.csv ${stats_directory}endDevices[1]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[2]_messageInDataCount.csv -i ${stats_directory}endDevices[2]_messageReceivedData.csv ${stats_directory}endDevices[2]_messageLostData.csv ${stats_directory}endDevices[2]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[3]_messageInDataCount.csv -i ${stats_directory}endDevices[3]_messageReceivedData.csv ${stats_directory}endDevices[3]_messageLostData.csv ${stats_directory}endDevices[3]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[4]_messageInDataCount.csv -i ${stats_directory}endDevices[4]_messageReceivedData.csv ${stats_directory}endDevices[4]_messageLostData.csv ${stats_directory}endDevices[4]_messageInvalidData.csv &
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
 
 # Wait parallel executions end
 wait

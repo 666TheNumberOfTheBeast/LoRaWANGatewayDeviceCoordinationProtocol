@@ -121,6 +121,19 @@ python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[2]_messageInCount.csv 
 python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[3]_messageInCount.csv -i ${stats_directory}endDevices[3]_messageReceived.csv ${stats_directory}endDevices[3]_messageLost.csv ${stats_directory}endDevices[3]_messageInvalid.csv &
 python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[4]_messageInCount.csv -i ${stats_directory}endDevices[4]_messageReceived.csv ${stats_directory}endDevices[4]_messageLost.csv ${stats_directory}endDevices[4]_messageInvalid.csv &
 
+
+#++++++++++++++++++++++++++++++ DATA ++++++++++++++++++++++++++++++
+# Create csv file merging received, lost and invalid data messages to obtain IN data messages ignoring missing files (here lost and invalid messages)
+python3 mergeCSV.py -r -I -o ${stats_directory}gateways[0]_messageInDataCount.csv -i ${stats_directory}gateways[0]_messageReceivedData.csv ${stats_directory}gateways[0]_messageLostData.csv ${stats_directory}gateways[0]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}gateways[1]_messageInDataCount.csv -i ${stats_directory}gateways[1]_messageReceivedData.csv ${stats_directory}gateways[1]_messageLostData.csv ${stats_directory}gateways[1]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[0]_messageInDataCount.csv -i ${stats_directory}endDevices[0]_messageReceivedData.csv ${stats_directory}endDevices[0]_messageLostData.csv ${stats_directory}endDevices[0]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[1]_messageInDataCount.csv -i ${stats_directory}endDevices[1]_messageReceivedData.csv ${stats_directory}endDevices[1]_messageLostData.csv ${stats_directory}endDevices[1]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[2]_messageInDataCount.csv -i ${stats_directory}endDevices[2]_messageReceivedData.csv ${stats_directory}endDevices[2]_messageLostData.csv ${stats_directory}endDevices[2]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[3]_messageInDataCount.csv -i ${stats_directory}endDevices[3]_messageReceivedData.csv ${stats_directory}endDevices[3]_messageLostData.csv ${stats_directory}endDevices[3]_messageInvalidData.csv &
+python3 mergeCSV.py -r -I -o ${stats_directory}endDevices[4]_messageInDataCount.csv -i ${stats_directory}endDevices[4]_messageReceivedData.csv ${stats_directory}endDevices[4]_messageLostData.csv ${stats_directory}endDevices[4]_messageInvalidData.csv &
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+
+
 # Wait parallel executions end
 wait
 

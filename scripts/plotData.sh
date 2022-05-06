@@ -480,4 +480,176 @@ python3 plotData.py RSSIs h -o $out_directory/RSSIs.pdf -l gateway0 gateway1 -i 
 # Wait parallel executions end
 wait
 
+#printf "\nAll charts are plotted. Bye :)\n"
+
+
+
+#++++++++++++++++++++++++++++++ DATA ++++++++++++++++++++++++++++++
+#==== STATS ABOUT A SINGLE DEVICE ====
+out_directory="${data_path}single_device/"
+echo "Plotting data into $out_directory"
+
+python3 plotData.py Sent\ data\ messages\ \(frequency\) s -o $out_directory/messageSentData.pdf -i ${data_path}endDevices[0]_messageSentData.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) s -o $out_directory/messageSentDataCountScattered.pdf -i ${data_path}endDevices[0]_messageSentDataCount.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) l -o $out_directory/messageSentDataCountLine.pdf -i ${data_path}endDevices[0]_messageSentDataCount.csv &
+
+# These automatically plot charts with min, max and mean
+python3 plotData.py Sent\ data\ messages b -I -o $out_directory/messagesSentDataBar.pdf -l sent -g device -i ${data_path}endDevices[0]_messageSentDataCount.csv &
+#======================================
+
+
+
+#==== STATS ABOUT MULTIPLE DEVICES ====
+out_directory="${data_path}multiple_devices/"
+echo "Plotting data into $out_directory"
+
+python3 plotData.py Sent\ messages\ \(frequency\) s -I -o $out_directory/messagesSentData.pdf -l device0 device1 device2 device3 device4 -i ${data_path}endDevices[0]_messageSentData.csv ${data_path}endDevices[1]_messageSentData.csv ${data_path}endDevices[2]_messageSentData.csv ${data_path}endDevices[3]_messageSentData.csv ${data_path}endDevices[4]_messageSentData.csv &
+python3 plotData.py Sent\ messages\ \(sum\) s -I -o $out_directory/messagesSentDataCountScattered.pdf -l device0 device1 device2 device3 device4 -i ${data_path}endDevices[0]_messageSentDataCount.csv ${data_path}endDevices[1]_messageSentDataCount.csv ${data_path}endDevices[2]_messageSentDataCount.csv ${data_path}endDevices[3]_messageSentDataCount.csv ${data_path}endDevices[4]_messageSentDataCount.csv &
+python3 plotData.py Sent\ messages\ \(sum\) l -I -o $out_directory/messagesSentDataCountLine.pdf -l device0 device1 device2 device3 device4 -i ${data_path}endDevices[0]_messageSentDataCount.csv ${data_path}endDevices[1]_messageSentDataCount.csv ${data_path}endDevices[2]_messageSentDataCount.csv ${data_path}endDevices[3]_messageSentDataCount.csv ${data_path}endDevices[4]_messageSentDataCount.csv &
+
+# These automatically plot charts with min, max and mean
+python3 plotData.py Sent\ data\ messages b -I -o $out_directory/messagesSentDataBar.pdf -l sent -g device0 device1 device2 device3 device4 -i ${data_path}endDevices[0]_messageSentDataCount.csv ${data_path}endDevices[1]_messageSentDataCount.csv ${data_path}endDevices[2]_messageSentDataCount.csv ${data_path}endDevices[3]_messageSentDataCount.csv ${data_path}endDevices[4]_messageSentDataCount.csv &
+#======================================
+
+wait
+
+#==== STATS ABOUT A SINGLE GATEWAY ====
+out_directory="${data_path}single_gateway/"
+echo "Plotting data into $out_directory"
+
+python3 plotData.py Sent\ data\ messages\ \(frequency\) s -o $out_directory/messagesSentData.pdf -i ${data_path}gateways[0]_messageSentData.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) s -o $out_directory/messagesSentDataCountScattered.pdf -i ${data_path}gateways[0]_messageSentDataCount.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) l -o $out_directory/messagesSentDataCountLine.pdf -i ${data_path}gateways[0]_messageSentDataCount.csv &
+
+python3 plotData.py Sent\ data\ messages\ \(frequency\) s -o $out_directory/messagesSentDataIp.pdf -l IP\ gateways IP\ server -i ${data_path}gateways[0]_messageSentGatewaysData.csv ${data_path}gateways[0]_messageSentServerData.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) s -o $out_directory/messagesSentDataIpCountScattered.pdf -l IP\ gateways IP\ server -i ${data_path}gateways[0]_messageSentGatewaysDataCount.csv ${data_path}gateways[0]_messageSentServerDataCount.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) l -o $out_directory/messagesSentDataIpCountLine.pdf -l IP\ gateways IP\ server -i ${data_path}gateways[0]_messageSentGatewaysDataCount.csv ${data_path}gateways[0]_messageSentServerDataCount.csv &
+
+
+python3 plotData.py Received\ data\ messages\ \(frequency\) s -o $out_directory/messagesReceivedData.pdf -i ${data_path}gateways[0]_messageReceivedData.csv &
+python3 plotData.py Received\ data\ messages\ \(sum\) s -o $out_directory/messagesReceivedDataCountScattered.pdf -i ${data_path}gateways[0]_messageReceivedDataCount.csv &
+python3 plotData.py Received\ data\ messages\ \(sum\) l -o $out_directory/messagesReceivedDataCountLine.pdf -i ${data_path}gateways[0]_messageReceivedDataCount.csv &
+
+python3 plotData.py Received\ data\ messages\ \(frequency\) s -o $out_directory/messagesReceivedDataLoRaIp.pdf -l LoRa\ devices IP\ gateways IP\ server -i ${data_path}gateways[0]_messageReceivedDevicesData.csv ${data_path}gateways[0]_messageReceivedGatewaysData.csv ${data_path}gateways[0]_messageReceivedServerData.csv &
+python3 plotData.py Received\ data\ messages\ \(sum\) s -o $out_directory/messagesReceivedDataLoRaIpCountScattered.pdf -l LoRa\ devices IP\ gateways IP\ server -i ${data_path}gateways[0]_messageReceivedDevicesDataCount.csv ${data_path}gateways[0]_messageReceivedGatewaysDataCount.csv ${data_path}gateways[0]_messageReceivedServerDataCount.csv &
+python3 plotData.py Received\ data\ messages\ \(sum\) l -o $out_directory/messagesReceivedDataLoRaIpCountLine.pdf -l LoRa\ devices IP\ gateways IP\ server -i ${data_path}gateways[0]_messageReceivedDevicesDataCount.csv ${data_path}gateways[0]_messageReceivedGatewaysDataCount.csv ${data_path}gateways[0]_messageReceivedServerDataCount.csv &
+
+
+python3 plotData.py Sent\ and\ Received\ data\ messages\ \(frequency\) s -I -o $out_directory/messagesSentAndReceivedData.pdf -l sent received -i ${data_path}gateways[0]_messageSentData.csv ${data_path}gateways[0]_messageReceivedData.csv &
+python3 plotData.py Sent\ and\ Received\ data\ messages\ \(sum\) s -I -o $out_directory/messagesSentAndReceivedDataCountScattered.pdf -l sent received -i ${data_path}gateways[0]_messageSentDataCount.csv ${data_path}gateways[0]_messageReceivedDataCount.csv &
+python3 plotData.py Sent\ and\ Received\ data\ messages\ \(sum\) l -I -o $out_directory/messagesSentAndReceivedDataCountLine.pdf -l sent received -i ${data_path}gateways[0]_messageSentDataCount.csv ${data_path}gateways[0]_messageReceivedDataCount.csv &
+
+python3 plotData.py Sent\ and\ Received\ data\ messages b -I -o $out_directory/messagesSentAndReceivedDataBar.pdf -l sent received -g gateway0 -i ${data_path}gateways[0]_messageSentDataCount.csv ${data_path}gateways[0]_messageReceivedDataCount.csv &
+
+
+# Do not enable ignore option when a single input file does not exist (lost messages may not exist) because is useless to generate an empty graph
+python3 plotData.py Lost\ data\ messages\ \(frequency\) s -o $out_directory/messagesLostData.pdf -i ${data_path}gateways[0]_messageLostData.csv &
+python3 plotData.py Lost\ data\ messages\ \(sum\) s -o $out_directory/messagesLostDataCountScattered.pdf -i ${data_path}gateways[0]_messageLostDataCount.csv &
+python3 plotData.py Lost\ data\ messages\ \(sum\) l -o $out_directory/messagesLostDataCountLine.pdf -i ${data_path}gateways[0]_messageLostDataCount.csv &
+
+# Enable ignore option when multiple input files are used and an input can miss (here lost messages)
+python3 plotData.py Received\ and\ Lost\ data\ messages\ \(frequency\) s -I -o $out_directory/messagesReceivedAndLostData.pdf -l received lost -i ${data_path}gateways[0]_messageReceivedData.csv ${data_path}gateways[0]_messageLostData.csv &
+python3 plotData.py Received\ and\ Lost\ data\ messages\ \(sum\) s -I -o $out_directory/messagesReceivedAndLostDataCountScattered.pdf -l received lost -i ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[0]_messageLostDataCount.csv &
+python3 plotData.py Received\ and\ Lost\ data\ messages\ \(sum\) l -I -o $out_directory/messagesReceivedAndLostDataCountLine.pdf -l received lost -i ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[0]_messageLostDataCount.csv &
+
+python3 plotData.py Received\ and\ Lost\ data\ messages b -I -o $out_directory/messagesReceivedAndLostDataBar.pdf -l received lost -g gateway0 -i ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[0]_messageLostDataCount.csv &
+
+
+python3 plotData.py In\ data\ messages\ \(sum\) s -o $out_directory/messagesInDataCountScattered.pdf -i ${data_path}gateways[0]_messageInDataCount.csv &
+python3 plotData.py In\ data\ messages\ \(sum\) l -o $out_directory/messagesInDataCountLine.pdf -i ${data_path}gateways[0]_messageInDataCount.csv &
+
+python3 plotData.py In\ and\ Received\ data\ messages b -I -o $out_directory/messagesInAndReceivedDataBar.pdf -l \in received -g gateway0 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_messageReceivedDataCount.csv &
+python3 plotData.py In\ and\ Received\ data\ messages b -I -o $out_directory/messagesInAndReceivedLoRaIpBar.pdf -l \in received\ LoRa\ devices received\ IP\ gateways received\ IP\ server -g gateway0 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_messageReceivedDevicesDataCount.csv ${data_path}gateways[0]_messageReceivedGatewaysDataCount.csv ${data_path}gateways[0]_messageReceivedServerDataCount.csv &
+
+python3 plotData.py In\ and\ Lost\ data\ messages b -I -o $out_directory/messagesInAndLostDataBar.pdf -l \in lost -g gateway0 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_messageLostDataCount.csv &
+python3 plotData.py In\ and\ Invalid\ data\ messages b -I -o $out_directory/messagesInAndInvalidDataBar.pdf -l \in invalid -g gateway0 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_messageInvalidDataCount.csv &
+
+
+# Do not enable ignore option when a single input file does not exist (interferences may not exist) because is useless to generate an empty graph
+python3 plotData.py Interferences\ data\ \(frequency\) s -o $out_directory/interferencesData.pdf -i ${data_path}gateways[0]_interferenceData.csv &
+python3 plotData.py Interferences\ data\ \(sum\) s -o $out_directory/interferencesDataCountScattered.pdf -i ${data_path}gateways[0]_interferenceDataCount.csv &
+python3 plotData.py Interferences\ data\ \(sum\) l -o $out_directory/interferencesDataCountLine.pdf -i ${data_path}gateways[0]_interferenceDataCount.csv &
+
+# Enable ignore option when multiple input files are used and an input can miss
+python3 plotData.py Possible\ interferences\ and\ interferences\ data\ \(frequency\) s -I -o $out_directory/possibleInterferencesAndInterferencesData.pdf -l possible\ interferences interferences -i ${data_path}gateways[0]_interferencePossibleData.csv ${data_path}gateways[0]_interferenceData.csv &
+python3 plotData.py Possible\ interferences\ and\ interferences\ data\ \(sum\) s -I -o $out_directory/possibleInterferencesAndInterferencesDataCountScattered.pdf -l possible\ interferences interferences -i ${data_path}gateways[0]_interferencePossibleDataCount.csv ${data_path}gateways[0]_interferenceDataCount.csv &
+python3 plotData.py Possible\ interferences\ and\ interferences\ data\ \(sum\) l -I -o $out_directory/possibleInterferencesAndInterferencesDataCountLine.pdf -l possible\ interferences interferences -i ${data_path}gateways[0]_interferencePossibleDataCount.csv ${data_path}gateways[0]_interferenceDataCount.csv &
+
+python3 plotData.py In\ messages\ and\ interferences\ data b -I -o $out_directory/messagesInAndInterferencesDataBar.pdf -l \in interferences -g gateway0 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_interferenceDataCount.csv &
+python3 plotData.py Possible\ interferences\ and\ interferences\ data b -I -o $out_directory/possibleInterferencesAndInterferencesDataBar.pdf -l possible\ interferences interferences -g gateway0 -i ${data_path}gateways[0]_interferencePossibleDataCount.csv ${data_path}gateways[0]_interferenceDataCount.csv &
+#==============================
+
+wait
+
+#=== STATS ABOUT MULTIPLE GATEWAYS ===
+out_directory="${data_path}multiple_gateways/"
+echo "Plotting data into $out_directory"
+
+python3 plotData.py Sent\ data\ messages\ \(frequency\) s -o $out_directory/messagesSentData.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageSentData.csv ${data_path}gateways[1]_messageSentData.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) s -o $out_directory/messagesSentDataCountScattered.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageSentDataCount.csv ${data_path}gateways[1]_messageSentDataCount.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) l -o $out_directory/messagesSentDataCountLine.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageSentDataCount.csv ${data_path}gateways[1]_messageSentDataCount.csv &
+
+python3 plotData.py Sent\ data\ messages\ \(frequency\) s -o $out_directory/messagesSentDataIp.pdf -l gateway0\ IP\ gateways gateway0\ IP\ server gateway1\ IP\ gateways gateway1\ IP\ server -i ${data_path}gateways[0]_messageSentGatewaysData.csv ${data_path}gateways[0]_messageSentServerData.csv ${data_path}gateways[1]_messageSentGatewaysData.csv ${data_path}gateways[1]_messageSentServerData.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) s -o $out_directory/messagesSentDataIpCountScattered.pdf -l gateway0\ IP\ gateways gateway0\ IP\ server gateway1\ IP\ gateways gateway1\ IP\ server -i ${data_path}gateways[0]_messageSentGatewaysDataCount.csv ${data_path}gateways[0]_messageSentServerDataCount.csv ${data_path}gateways[1]_messageSentGatewaysDataCount.csv ${data_path}gateways[1]_messageSentServerDataCount.csv &
+python3 plotData.py Sent\ data\ messages\ \(sum\) l -o $out_directory/messagesSentDataIpCountLine.pdf -l gateway0\ IP\ gateways gateway0\ IP\ server gateway1\ IP\ gateways gateway1\ IP\ server -i ${data_path}gateways[0]_messageSentGatewaysDataCount.csv ${data_path}gateways[0]_messageSentServerDataCount.csv ${data_path}gateways[1]_messageSentGatewaysDataCount.csv ${data_path}gateways[1]_messageSentServerDataCount.csv &
+
+
+python3 plotData.py Received\ data\ messages\ \(frequency\) s -o $out_directory/messagesReceivedData.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageReceivedData.csv ${data_path}gateways[1]_messageReceivedData.csv &
+python3 plotData.py Received\ data\ messages\ \(sum\) s -o $out_directory/messagesReceivedDataCountScattered.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[1]_messageReceivedDataCount.csv &
+python3 plotData.py Received\ data\ messages\ \(sum\) l -o $out_directory/messagesReceivedDataCountLine.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[1]_messageReceivedDataCount.csv &
+
+python3 plotData.py Received\ data\ messages\ \(frequency\) s -o $out_directory/messagesReceivedDataLoRaIp.pdf -l gateway0\ LoRa\ devices gateway0\ IP\ gateways gateway0\ IP\ server gateway1\ LoRa\ devices gateway1\ IP\ gateways gateway1\ IP\ server -i ${data_path}gateways[0]_messageReceivedDevicesData.csv ${data_path}gateways[0]_messageReceivedGatewaysData.csv ${data_path}gateways[0]_messageReceivedServerData.csv ${data_path}gateways[1]_messageReceivedDevicesData.csv ${data_path}gateways[1]_messageReceivedGatewaysData.csv ${data_path}gateways[1]_messageReceivedServerData.csv &
+python3 plotData.py Received\ data\ messages\ \(sum\) s -o $out_directory/messagesReceivedDataLoRaIpCountScattered.pdf -l gateway0\ LoRa\ devices gateway0\ IP\ gateways gateway0\ IP\ server gateway1\ LoRa\ devices gateway1\ IP\ gateways gateway1\ IP\ server -i ${data_path}gateways[0]_messageReceivedDevicesDataCount.csv ${data_path}gateways[0]_messageReceivedGatewaysDataCount.csv ${data_path}gateways[0]_messageReceivedServerDataCount.csv ${data_path}gateways[1]_messageReceivedDevicesDataCount.csv ${data_path}gateways[1]_messageReceivedGatewaysDataCount.csv ${data_path}gateways[1]_messageReceivedServerDataCount.csv &
+python3 plotData.py Received\ data\ messages\ \(sum\) l -o $out_directory/messagesReceivedDataLoRaIpCountLine.pdf -l gateway0\ LoRa\ devices gateway0\ IP\ gateways gateway0\ IP\ server gateway1\ LoRa\ devices gateway1\ IP\ gateways gateway1\ IP\ server -i ${data_path}gateways[0]_messageReceivedDevicesDataCount.csv ${data_path}gateways[0]_messageReceivedGatewaysDataCount.csv ${data_path}gateways[0]_messageReceivedServerDataCount.csv ${data_path}gateways[1]_messageReceivedDevicesDataCount.csv ${data_path}gateways[1]_messageReceivedGatewaysDataCount.csv ${data_path}gateways[1]_messageReceivedServerDataCount.csv &
+
+
+python3 plotData.py Sent\ and\ Received\ data\ messages\ \(frequency\) s -I -o $out_directory/messagesSentAndReceivedData.pdf -l gateway0\ sent gateway0\ received gateway1\ sent gateway1\ received -i ${data_path}gateways[0]_messageSentData.csv ${data_path}gateways[0]_messageReceivedData.csv ${data_path}gateways[1]_messageSentData.csv ${data_path}gateways[1]_messageReceivedData.csv &
+python3 plotData.py Sent\ and\ Received\ data\ messages\ \(sum\) s -I -o $out_directory/messagesSentAndReceivedDataCountScattered.pdf -l gateway0\ sent gateway0\ received gateway1\ sent gateway1\ received -i ${data_path}gateways[0]_messageSentDataCount.csv ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[1]_messageSentDataCount.csv ${data_path}gateways[1]_messageReceivedDataCount.csv &
+python3 plotData.py Sent\ and\ Received\ data\ messages\ \(sum\) l -I -o $out_directory/messagesSentAndReceivedDataCountLine.pdf -l gateway0\ sent gateway0\ received gateway1\ sent gateway1\ received -i ${data_path}gateways[0]_messageSentDataCount.csv ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[1]_messageSentDataCount.csv ${data_path}gateways[1]_messageReceivedDataCount.csv &
+
+python3 plotData.py Sent\ and\ Received\ data\ messages b -I -o $out_directory/messagesSentAndReceivedDataBar.pdf -l sent received -g gateway0 gateway1 -i ${data_path}gateways[0]_messageSentDataCount.csv ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[1]_messageSentDataCount.csv ${data_path}gateways[1]_messageReceivedDataCount.csv &
+
+
+# Do not enable ignore option when a single input file does not exist (lost messages may not exist) because is useless to generate an empty graph
+python3 plotData.py Lost\ data\ messages\ \(frequency\) s -o $out_directory/messagesLostData.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageLostData.csv ${data_path}gateways[1]_messageLostData.csv &
+python3 plotData.py Lost\ data\ messages\ \(sum\) s -o $out_directory/messagesLostDataCountScattered.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageLostDataCount.csv ${data_path}gateways[1]_messageLostDataCount.csv &
+python3 plotData.py Lost\ data\ messages\ \(sum\) l -o $out_directory/messagesLostDataCountLine.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageLostDataCount.csv ${data_path}gateways[1]_messageLostDataCount.csv &
+
+# Enable ignore option when multiple input files are used and an input can miss (here lost messages)
+python3 plotData.py Received\ and\ Lost\ data\ messages\ \(frequency\) s -I -o $out_directory/messagesReceivedAndLostData.pdf -l gateway0\ received gateway0\ lost gateway1\ received gateway1\ lost -i ${data_path}gateways[0]_messageReceivedData.csv ${data_path}gateways[0]_messageLostData.csv ${data_path}gateways[1]_messageReceivedData.csv ${data_path}gateways[1]_messageLostData.csv &
+python3 plotData.py Received\ and\ Lost\ data\ messages\ \(sum\) s -I -o $out_directory/messagesReceivedAndLostDataCountScattered.pdf -l gateway0\ received gateway0\ lost gateway1\ received gateway1\ lost -i ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[0]_messageLostDataCount.csv ${data_path}gateways[1]_messageReceivedDataCount.csv ${data_path}gateways[1]_messageLostDataCount.csv &
+python3 plotData.py Received\ and\ Lost\ data\ messages\ \(sum\) l -I -o $out_directory/messagesReceivedAndLostDataCountLine.pdf -l gateway0\ received gateway0\ lost gateway1\ received gateway1\ lost -i ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[0]_messageLostDataCount.csv ${data_path}gateways[1]_messageReceivedDataCount.csv ${data_path}gateways[1]_messageLostDataCount.csv &
+
+python3 plotData.py Received\ and\ Lost\ data\ messages b -I -o $out_directory/messagesReceivedAndLostDataBar.pdf -l received lost -g gateway0 gateway1 -i ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[0]_messageLostDataCount.csv ${data_path}gateways[1]_messageReceivedDataCount.csv ${data_path}gateways[1]_messageLostDataCount.csv &
+
+
+python3 plotData.py In\ data\ messages\ \(sum\) s -o $out_directory/messagesInDataCountScattered.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[1]_messageInDataCount.csv &
+python3 plotData.py In\ data\ messages\ \(sum\) l -o $out_directory/messagesInDataCountLine.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[1]_messageInDataCount.csv &
+
+python3 plotData.py In\ and\ Received\ data\ messages b -I -o $out_directory/messagesInAndReceivedDataBar.pdf -l \in received -g gateway0 gateway1 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_messageReceivedDataCount.csv ${data_path}gateways[1]_messageInDataCount.csv ${data_path}gateways[1]_messageReceivedDataCount.csv &
+python3 plotData.py In\ and\ Received\ data\ messages b -I -o $out_directory/messagesInAndReceivedLoRaIpBar.pdf -l \in received\ LoRa\ devices received\ IP\ gateways received\ IP\ server -g gateway0 gateway1 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_messageReceivedDevicesDataCount.csv ${data_path}gateways[0]_messageReceivedGatewaysDataCount.csv ${data_path}gateways[0]_messageReceivedServerDataCount.csv ${data_path}gateways[1]_messageInDataCount.csv ${data_path}gateways[1]_messageReceivedDevicesDataCount.csv ${data_path}gateways[1]_messageReceivedGatewaysDataCount.csv ${data_path}gateways[1]_messageReceivedServerDataCount.csv &
+
+python3 plotData.py In\ and\ Lost\ data\ messages b -I -o $out_directory/messagesInAndLostDataBar.pdf -l \in lost -g gateway0 gateway1 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_messageLostDataCount.csv ${data_path}gateways[1]_messageInDataCount.csv ${data_path}gateways[1]_messageLostDataCount.csv &
+python3 plotData.py In\ and\ Invalid\ data\ messages b -I -o $out_directory/messagesInAndInvalidDataBar.pdf -l \in invalid -g gateway0 gateway1 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_messageInvalidDataCount.csv ${data_path}gateways[1]_messageInDataCount.csv ${data_path}gateways[1]_messageInvalidDataCount.csv &
+
+
+# Do not enable ignore option when a single input file does not exist (interferences may not exist) because is useless to generate an empty graph
+python3 plotData.py Interferences\ data\ \(frequency\) s -o $out_directory/interferencesData.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_interferenceData.csv ${data_path}gateways[1]_interferenceData.csv &
+python3 plotData.py Interferences\ data\ \(sum\) s -o $out_directory/interferencesDataCountScattered.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_interferenceDataCount.csv ${data_path}gateways[1]_interferenceDataCount.csv &
+python3 plotData.py Interferences\ data\ \(sum\) l -o $out_directory/interferencesDataCountLine.pdf -l gateway0 gateway1 -i ${data_path}gateways[0]_interferenceDataCount.csv ${data_path}gateways[1]_interferenceDataCount.csv &
+
+
+# Enable ignore option when multiple input files are used and an input can miss
+python3 plotData.py Possible\ interferences\ and\ interferences\ data\ \(frequency\) s -I -o $out_directory/possibleInterferencesAndInterferencesData.pdf -l gateway0\ possible\ interferences gateway0\ interferences gateway1\ possible\ interferences gateway1\ interferences -i ${data_path}gateways[0]_interferencePossibleData.csv ${data_path}gateways[0]_interferenceData.csv ${data_path}gateways[1]_interferencePossibleData.csv ${data_path}gateways[1]_interferenceData.csv &
+python3 plotData.py Possible\ interferences\ and\ interferences\ data\ \(sum\) s -I -o $out_directory/possibleInterferencesAndInterferencesDataCountScattered.pdf -l gateway0\ possible\ interferences gateway0\ interferences gateway1\ possible\ interferences gateway1\ interferences -i ${data_path}gateways[0]_interferencePossibleDataCount.csv ${data_path}gateways[0]_interferenceDataCount.csv ${data_path}gateways[1]_interferencePossibleDataCount.csv ${data_path}gateways[1]_interferenceDataCount.csv &
+python3 plotData.py Possible\ interferences\ and\ interferences\ data\ \(sum\) l -I -o $out_directory/possibleInterferencesAndInterferencesDataCountLine.pdf -l gateway0\ possible\ interferences gateway0\ interferences gateway1\ possible\ interferences gateway1\ interferences -i ${data_path}gateways[0]_interferencePossibleDataCount.csv ${data_path}gateways[0]_interferenceDataCount.csv ${data_path}gateways[1]_interferencePossibleDataCount.csv ${data_path}gateways[1]_interferenceDataCount.csv &
+
+python3 plotData.py In\ messages\ and\ interferences\ data b -I -o $out_directory/messagesInAndInterferencesDataBar.pdf -l \in interferences -g gateway0 gateway1 -i ${data_path}gateways[0]_messageInDataCount.csv ${data_path}gateways[0]_interferenceDataCount.csv ${data_path}gateways[1]_messageInDataCount.csv ${data_path}gateways[1]_interferenceDataCount.csv &
+python3 plotData.py Possible\ interferences\ and\ interferences\ data b -I -o $out_directory/possibleInterferencesAndInterferencesDataBar.pdf -l gateway0\ possible\ interferences gateway0\ interferences gateway1\ possible\ interferences gateway1\ interferences -g gateway0 gateway1 -i ${data_path}gateways[0]_interferencePossibleDataCount.csv ${data_path}gateways[0]_interferenceDataCount.csv ${data_path}gateways[1]_interferencePossibleDataCount.csv ${data_path}gateways[1]_interferenceDataCount.csv &
+#==============================
+
+# Wait parallel executions end
+wait
+
 printf "\nAll charts are plotted. Bye :)\n"
+#++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
