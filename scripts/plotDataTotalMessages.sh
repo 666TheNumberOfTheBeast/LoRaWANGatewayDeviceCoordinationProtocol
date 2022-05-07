@@ -187,6 +187,8 @@ wait
 
 
 #++++++++++++++++++++++++++++++ DATA ++++++++++++++++++++++++++++++
+printf "\nTrying to merge some CSV files to obtain total data messages\n"
+
 python3 mergeCSV.py -r -I -o ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv -i $(getAllFiles "_messageSentData.csv" $2 true) &
 python3 mergeCSV.py -r -I -o ${stats_directory}messageSentGatewaysDataCount${2}_${3}.csv -i $(getAllFiles "_messageSentData.csv" $3 false) &
 python3 mergeCSV.py -r -I -o ${stats_directory}messageSentGatewaysIpGatewaysDataCount${2}_${3}.csv -i $(getAllFiles "_messageSentGatewaysData.csv" $3 false) &
@@ -199,6 +201,8 @@ python3 mergeCSV.py -r -I -o ${stats_directory}messageReceivedGatewaysIpServerDa
 
 python3 mergeCSV.py -r -I -o ${stats_directory}messageLostGatewaysDataCount${2}_${3}.csv -i $(getAllFiles "_messageLostData.csv" $3 false) &
 
+# Wait parallel executions end
+wait
 
 #==== STATS ABOUT TOTAL NUMBER OF MESSAGES ====
 out_directory="${stats_directory}total_messages/"
@@ -228,10 +232,10 @@ python3 plotData.py Sent\ and\ Received\ gateway\ data\ messages b -I -o $out_di
 
 
 # Total number of sent, received and lost uplinks
-python3 plotData.py Sent\ and\ Received\ uplinks\ \(sum\) s -I -o $out_directory/messagesSentAndReceivedUplinksCountScattered.pdf -l sent received -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv &
-python3 plotData.py Sent\ and\ Received\ uplinks\ \(sum\) l -I -o $out_directory/messagesSentAndReceivedUplinksCountLine.pdf -l sent received -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv &
+python3 plotData.py Sent\ and\ Received\ uplinks\ \(sum\) s -I -o $out_directory/messagesSentAndReceivedUplinksDataCountScattered.pdf -l sent received -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv &
+python3 plotData.py Sent\ and\ Received\ uplinks\ \(sum\) l -I -o $out_directory/messagesSentAndReceivedUplinksDataCountLine.pdf -l sent received -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv &
 
-python3 plotData.py Sent\ and\ Received\ uplinks b -I -o $out_directory/messagesSentAndReceivedUplinksBar.pdf -l sent received -g uplinks -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv &
+python3 plotData.py Sent\ and\ Received\ uplinks b -I -o $out_directory/messagesSentAndReceivedUplinksDataBar.pdf -l sent received -g uplinks -i ${stats_directory}messageSentDevicesDataCount${2}_${3}.csv ${stats_directory}messageReceivedGatewaysLoRaDataCount${2}_${3}.csv &
 #==============================================
 #++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 
